@@ -32,16 +32,31 @@ export const useDocuments = () => {
           setDocuments([]);
         }
 
+        const docs = documentsList ? JSON.parse(documentsList) : [];
+        
         if (currentId) {
           setCurrentDocumentId(currentId);
         } else {
           // If no current document, check if there are any documents
-          const docs = documentsList ? JSON.parse(documentsList) : [];
           if (Array.isArray(docs) && docs.length > 0) {
             setCurrentDocumentId(docs[0].id);
             localStorage.setItem(CURRENT_DOCUMENT_KEY, docs[0].id);
           } else {
-            setCurrentDocumentId(null);
+            // Create default document if none exist
+            const defaultDoc: Document = {
+              id: `doc-${Date.now()}-default`,
+              title: "Welcome",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            
+            const initialDocs = [defaultDoc];
+            localStorage.setItem(DOCUMENTS_LIST_KEY, JSON.stringify(initialDocs));
+            localStorage.setItem(CURRENT_DOCUMENT_KEY, defaultDoc.id);
+            localStorage.setItem(`${DOCUMENT_PREFIX}${defaultDoc.id}`, JSON.stringify([]));
+            
+            setDocuments(initialDocs);
+            setCurrentDocumentId(defaultDoc.id);
           }
         }
       } catch (error) {
