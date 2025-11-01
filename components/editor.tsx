@@ -31,9 +31,17 @@ const Editor = ({
     // Create a blob URL that works immediately (temporary solution)
     // For production, you'd want to upload to a proper storage service
     return new Promise((resolve, reject) => {
-      // Check if it's an image
-      if (!file.type.startsWith('image/')) {
-        reject(new Error('File must be an image'));
+      // Strict validation: Check both MIME type and file extension
+      const validImageTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'];
+      const validExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
+      
+      const fileName = file.name.toLowerCase();
+      const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+      const isValidMimeType = file.type.startsWith('image/') && validImageTypes.includes(file.type);
+      const isValidExtension = validExtensions.includes(fileExtension);
+
+      if (!isValidMimeType || !isValidExtension) {
+        reject(new Error('Only image files are allowed (PNG, JPG, GIF, WebP, BMP, SVG)'));
         return;
       }
 
@@ -141,6 +149,109 @@ const Editor = ({
       window.removeEventListener('paste', handlePaste as EventListener);
     };
   }, [editor, onEditorReady, handleUpload]);
+
+  // Restrict file input to images only and handle drag & drop
+  useEffect(() => {
+    let observer: MutationObserver | undefined;
+
+    // Strict validation function
+    const isValidImageFile = (file: File): boolean => {
+      const validImageTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'];
+      const validExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
+      
+      const fileName = file.name.toLowerCase();
+      const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+      const isValidMimeType = file.type.startsWith('image/') && validImageTypes.includes(file.type);
+      const isValidExtension = validExtensions.includes(fileExtension);
+      
+      return isValidMimeType && isValidExtension;
+    };
+
+    // Intercept ALL file change events in the entire document with capture phase
+    const handleFileChange = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      if (target && target.type === 'file' && target.files && target.files.length > 0) {
+        const file = target.files[0];
+        if (!isValidImageFile(file)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          alert('Only image files are allowed (PNG, JPG, GIF, WebP, BMP, SVG). Please select an image file.');
+          target.value = ''; // Clear the input
+          return false;
+        }
+      }
+    };
+
+    // Intercept drag & drop globally
+    const handleDragOver = (e: Event) => {
+      const dragEvent = e as DragEvent;
+      // Only prevent default if there are files and they're not images
+      if (dragEvent.dataTransfer?.files && dragEvent.dataTransfer.files.length > 0) {
+        const file = dragEvent.dataTransfer.files[0];
+        if (!isValidImageFile(file)) {
+          dragEvent.preventDefault();
+          dragEvent.stopPropagation();
+        }
+      }
+    };
+
+    const handleDrop = (e: Event) => {
+      const dragEvent = e as DragEvent;
+      const files = dragEvent.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (!isValidImageFile(file)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          alert('Only image files are allowed (PNG, JPG, GIF, WebP, BMP, SVG). Please drop an image file.');
+          return;
+        }
+      }
+    };
+
+    // Function to set accept attribute on file inputs
+    const setAcceptOnInputs = () => {
+      const allFileInputs = document.querySelectorAll('input[type="file"]');
+      allFileInputs.forEach((input) => {
+        const htmlInput = input as HTMLInputElement;
+        htmlInput.accept = 'image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp,image/svg+xml';
+        htmlInput.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp,image/svg+xml');
+      });
+    };
+
+    // Add global listeners with capture phase (runs before any other handlers)
+    document.addEventListener('change', handleFileChange as EventListener, true);
+    document.addEventListener('dragover', handleDragOver as EventListener, true);
+    document.addEventListener('drop', handleDrop as EventListener, true);
+
+    // Set accept on existing inputs
+    setAcceptOnInputs();
+
+    // Use MutationObserver to catch dynamically created file inputs ANYWHERE in the document
+    observer = new MutationObserver(() => {
+      setAcceptOnInputs();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Also periodically check (backup in case MutationObserver misses something)
+    const interval = setInterval(setAcceptOnInputs, 100);
+
+    return () => {
+      document.removeEventListener('change', handleFileChange as EventListener, true);
+      document.removeEventListener('dragover', handleDragOver as EventListener, true);
+      document.removeEventListener('drop', handleDrop as EventListener, true);
+      if (observer) {
+        observer.disconnect();
+      }
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <div className={`w-full ${resolvedTheme === "dark" ? "bg-[#191919]" : "bg-background"}`}>
