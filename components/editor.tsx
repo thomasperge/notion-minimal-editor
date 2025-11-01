@@ -10,7 +10,7 @@ import {
   useBlockNote
 } from "@blocknote/react";
 import "@blocknote/core/style.css";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 
 interface EditorProps {
   onChange?: (value: string) => void;
@@ -53,19 +53,26 @@ const Editor = ({
     });
   }, []);
 
+  const parsedContent = useMemo(() => {
+    if (initialContent && initialContent.trim() !== "") {
+      try {
+        const parsed = JSON.parse(initialContent) as PartialBlock[];
+        // If parsed content is valid and not empty, use it
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+        return undefined;
+      } catch (error) {
+        console.error("Failed to parse initialContent:", error);
+        return undefined;
+      }
+    }
+    return undefined;
+  }, [initialContent]);
+
   const editor: BlockNoteEditor = useBlockNote({
     editable,
-    initialContent: 
-      initialContent && initialContent.trim() !== ""
-      ? (() => {
-          try {
-            return JSON.parse(initialContent) as PartialBlock[];
-          } catch (error) {
-            console.error("Failed to parse initialContent:", error);
-            return undefined;
-          }
-        })()
-      : undefined,
+    initialContent: parsedContent,
     onEditorContentChange: (editor) => {
       if (onChange) {
         onChange(JSON.stringify(editor.topLevelBlocks, null, 2));
@@ -136,7 +143,7 @@ const Editor = ({
   }, [editor, onEditorReady, handleUpload]);
 
   return (
-    <div className={`w-full py-8 ${resolvedTheme === "dark" ? "bg-[#191919]" : "bg-background"}`}>
+    <div className={`w-full ${resolvedTheme === "dark" ? "bg-[#191919]" : "bg-background"}`}>
       <BlockNoteView
         editor={editor}
         theme={resolvedTheme === "dark" ? "dark" : "light"}

@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@/components/providers/theme-provider'
+import { DocumentsProvider } from '@/components/providers/documents-provider'
 import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
@@ -25,7 +26,9 @@ export default function RootLayout({
           disableTransitionOnChange
           storageKey="editor-theme"
         >
-          {children}
+          <DocumentsProvider>
+            {children}
+          </DocumentsProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,15 +1,18 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { Header } from "@/components/header";
+import { Sidebar } from "@/components/sidebar";
 import { BlockNoteEditor, PartialBlock } from "@blocknote/core";
-
-const STORAGE_KEY = "editor-content";
+import { useDocumentsContext } from "@/components/providers/documents-provider";
 
 const HomePage = () => {
   const Editor = useMemo(() => dynamic(() => import("@/components/editor"), { ssr: false }) ,[]);
   const editorRef = useRef<BlockNoteEditor | null>(null);
+  const previousDocumentIdRef = useRef<string | null>(null);
+  const pendingSaveRef = useRef<string | null>(null);
+  
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [initialContent, setInitialContent] = useState<string | undefined>(undefined);
@@ -17,29 +20,149 @@ const HomePage = () => {
   const [editorWidth, setEditorWidth] = useState<'narrow' | 'medium' | 'wide' | 'full'>('medium');
   const [autoSave, setAutoSave] = useState(true);
   const autoSaveRef = useRef(true);
+  const [isContentLoaded, setIsContentLoaded] = useState(false);
+  const [editorKey, setEditorKey] = useState<string>("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Load content and settings from localStorage on mount
+  const {
+    currentDocumentId,
+    isLoaded: documentsLoaded,
+    getDocumentContent,
+    saveDocumentContent,
+  } = useDocumentsContext();
+
+  // Migrate old data to new system (one-time migration)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedContent = localStorage.getItem(STORAGE_KEY);
-      if (savedContent) {
+    if (typeof window !== "undefined" && documentsLoaded) {
+      const oldContent = localStorage.getItem("editor-content");
+      const documentsList = localStorage.getItem("documents-list");
+      
+      if (oldContent && !documentsList) {
         try {
-          // Validate it's valid JSON
-          JSON.parse(savedContent);
-          setInitialContent(savedContent);
+          JSON.parse(oldContent);
+          const migratedDoc = {
+            id: `doc-${Date.now()}-migrated`,
+            title: "Migrated Document",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          localStorage.setItem("documents-list", JSON.stringify([migratedDoc]));
+          localStorage.setItem("current-document-id", migratedDoc.id);
+          localStorage.setItem(`document-${migratedDoc.id}`, oldContent);
+          localStorage.removeItem("editor-content");
         } catch (error) {
-          console.error("Invalid saved content, clearing localStorage");
-          localStorage.removeItem(STORAGE_KEY);
+          console.error("Migration error:", error);
         }
       }
+    }
+  }, [documentsLoaded]);
+
+  // CRITICAL: Save content of previous document before switching
+  const saveCurrentDocumentContent = useCallback((documentId: string | null, content: string | null) => {
+    if (!documentId || !content || !autoSaveRef.current) return;
+    
+    try {
+      // Validate content is valid JSON
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        // Save with explicit document ID to ensure correct storage
+        const storageKey = `document-${documentId}`;
+        localStorage.setItem(storageKey, content);
+        console.log(`✅ Saved content for document ${documentId} (${storageKey})`);
+        
+        // Also update via the hook to update metadata
+        saveDocumentContent(documentId, content);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to save content for document ${documentId}:`, error);
+    }
+  }, [saveDocumentContent]);
+
+  // Save content when it changes (only for current document)
+  const handleContentChange = useCallback((content: string) => {
+    if (!content || !currentDocumentId) return;
+    
+    // Store pending save with current document ID
+    pendingSaveRef.current = content;
+    
+    if (autoSaveRef.current && currentDocumentId) {
+      saveCurrentDocumentContent(currentDocumentId, content);
+    }
+  }, [currentDocumentId, saveCurrentDocumentContent]);
+
+  // CRITICAL: Handle document switching - save old, load new
+  useEffect(() => {
+    if (!documentsLoaded) return;
+
+    // Save previous document content BEFORE switching
+    if (previousDocumentIdRef.current && previousDocumentIdRef.current !== currentDocumentId) {
+      if (editorRef.current && pendingSaveRef.current) {
+        console.log(`💾 Saving previous document ${previousDocumentIdRef.current} before switch`);
+        saveCurrentDocumentContent(previousDocumentIdRef.current, pendingSaveRef.current);
+        pendingSaveRef.current = null;
+      } else if (editorRef.current) {
+        // Try to get current content from editor
+        try {
+          const currentContent = JSON.stringify(editorRef.current.topLevelBlocks, null, 2);
+          console.log(`💾 Saving previous document ${previousDocumentIdRef.current} (from editor)`);
+          saveCurrentDocumentContent(previousDocumentIdRef.current, currentContent);
+        } catch (error) {
+          console.error("Failed to get content from editor:", error);
+        }
+      }
+    }
+
+    // Reset editor state
+    setIsContentLoaded(false);
+    editorRef.current = null;
+    pendingSaveRef.current = null;
+
+    // Load new document content
+    if (currentDocumentId) {
+      const content = getDocumentContent(currentDocumentId);
       
-      // Load editor width setting
+      if (content) {
+        try {
+          // Validate content
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            console.log(`📂 Loading document ${currentDocumentId} (${parsed.length} blocks)`);
+            setInitialContent(content);
+          } else {
+            console.warn(`⚠️ Invalid content format for document ${currentDocumentId}`);
+            setInitialContent(undefined);
+          }
+        } catch (error) {
+          console.error(`❌ Failed to parse content for document ${currentDocumentId}:`, error);
+          setInitialContent(undefined);
+        }
+      } else {
+        console.log(`📄 New empty document ${currentDocumentId}`);
+        setInitialContent(undefined);
+      }
+      
+      // Force editor re-render with new key
+      setEditorKey(`${currentDocumentId}-${Date.now()}`);
+      setIsContentLoaded(true);
+    } else {
+      setInitialContent(undefined);
+      setIsContentLoaded(true);
+      setEditorKey("");
+    }
+
+    // Update previous document reference
+    previousDocumentIdRef.current = currentDocumentId;
+  }, [currentDocumentId, documentsLoaded, getDocumentContent, saveCurrentDocumentContent]);
+
+  // Load settings from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
       const savedWidth = localStorage.getItem('editor-width');
       if (savedWidth && ['narrow', 'medium', 'wide', 'full'].includes(savedWidth)) {
         setEditorWidth(savedWidth as 'narrow' | 'medium' | 'wide' | 'full');
       }
       
-      // Load auto-save setting
       const savedAutoSave = localStorage.getItem('editor-autoSave');
       if (savedAutoSave !== null) {
         const autoSaveValue = savedAutoSave === 'true';
@@ -47,19 +170,25 @@ const HomePage = () => {
         autoSaveRef.current = autoSaveValue;
       }
       
+      // Load sidebar state
+      const savedSidebarOpen = localStorage.getItem('sidebar-open');
+      if (savedSidebarOpen !== null) {
+        setSidebarOpen(savedSidebarOpen === 'true');
+      }
+      
       setIsLoaded(true);
     }
   }, []);
 
-  // Save content to localStorage when it changes
-  const handleContentChange = (content: string) => {
-    if (typeof window !== "undefined" && content && autoSaveRef.current) {
-      try {
-        localStorage.setItem(STORAGE_KEY, content);
-      } catch (error) {
-        console.error("Failed to save to localStorage:", error);
-      }
+  // Save sidebar state to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem('sidebar-open', String(sidebarOpen));
     }
+  }, [sidebarOpen]);
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
   };
 
   const handleEditorReady = (editor: BlockNoteEditor) => {
@@ -69,11 +198,9 @@ const HomePage = () => {
     const tiptapEditor = (editor as any)._tiptapEditor;
     
     if (tiptapEditor) {
-      // Initial state
       setCanUndo(tiptapEditor.can().undo());
       setCanRedo(tiptapEditor.can().redo());
       
-      // Update state on transaction
       const updateState = () => {
         if (tiptapEditor) {
           setCanUndo(tiptapEditor.can().undo());
@@ -84,7 +211,6 @@ const HomePage = () => {
       tiptapEditor.on('transaction', updateState);
       tiptapEditor.on('update', updateState);
       
-      // Store cleanup function
       (editorRef.current as any).__updateState = updateState;
     }
   };
@@ -113,9 +239,9 @@ const HomePage = () => {
 
   // Handle export
   const handleExport = (format: 'json' | 'markdown' | 'html') => {
-    if (!editorRef.current) return;
+    if (!editorRef.current || !currentDocumentId) return;
 
-    const content = localStorage.getItem(STORAGE_KEY);
+    const content = getDocumentContent(currentDocumentId);
     if (!content) {
       alert('No content to export');
       return;
@@ -133,14 +259,12 @@ const HomePage = () => {
           mimeType = 'application/json';
           break;
         case 'markdown':
-          // Convert BlockNote blocks to markdown
           const blocks = JSON.parse(content);
           exportContent = convertToMarkdown(blocks);
           filename = 'document.md';
           mimeType = 'text/markdown';
           break;
         case 'html':
-          // Convert BlockNote blocks to HTML
           const blocksHtml = JSON.parse(content);
           exportContent = convertToHTML(blocksHtml);
           filename = 'document.html';
@@ -148,7 +272,6 @@ const HomePage = () => {
           break;
       }
 
-      // Download file
       const blob = new Blob([exportContent], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -164,7 +287,6 @@ const HomePage = () => {
     }
   };
 
-  // Helper to extract text from BlockNote content
   const extractText = (content: any[]): string => {
     if (!content || !Array.isArray(content)) return '';
     return content.map((item: any) => {
@@ -175,7 +297,6 @@ const HomePage = () => {
     }).join('');
   };
 
-  // Convert BlockNote blocks to Markdown (simplified)
   const convertToMarkdown = (blocks: any[]): string => {
     if (!blocks || !Array.isArray(blocks)) return '';
     
@@ -195,14 +316,12 @@ const HomePage = () => {
       } else if (block.type === 'image') {
         markdown += `![${block.props?.altText || 'image'}](${block.props?.url || ''})\n\n`;
       } else if (text) {
-        // Default: just add the text
         markdown += text + '\n\n';
       }
     }
     return markdown.trim();
   };
 
-  // Convert BlockNote blocks to HTML (simplified)
   const convertToHTML = (blocks: any[]): string => {
     if (!blocks || !Array.isArray(blocks)) return '';
     
@@ -273,8 +392,8 @@ const HomePage = () => {
 
   // Handle import
   const handleImport = (content: string, format: 'json' | 'markdown' | 'html') => {
-    if (!editorRef.current) {
-      alert('Editor not ready');
+    if (!editorRef.current || !currentDocumentId) {
+      alert('Editor not ready or no document selected');
       return;
     }
 
@@ -287,13 +406,11 @@ const HomePage = () => {
           throw new Error('Invalid JSON format');
         }
       } else if (format === 'markdown') {
-        // Convert markdown to BlockNote blocks (simplified)
         const lines = content.split('\n');
         blocks = [];
         
         for (const line of lines) {
           if (line.trim() === '') {
-            // Add empty paragraph for blank lines
             blocks.push({
               type: 'paragraph' as const,
               content: ''
@@ -301,7 +418,6 @@ const HomePage = () => {
             continue;
           }
           
-          // Headings
           if (line.startsWith('### ')) {
             blocks.push({
               type: 'heading' as const,
@@ -338,15 +454,13 @@ const HomePage = () => {
           }
         }
         
-        // Filter out empty paragraphs if they're the only content
         blocks = blocks.filter(block => {
           if (block.type === 'paragraph' && typeof block.content === 'string' && !block.content.trim()) {
-            return blocks.length > 1; // Keep if there are other blocks
+            return blocks.length > 1;
           }
           return true;
         });
       } else if (format === 'html') {
-        // Convert HTML to BlockNote blocks (simplified)
         const parser = new DOMParser();
         const doc = parser.parseFromString(content, 'text/html');
         const body = doc?.body;
@@ -431,7 +545,6 @@ const HomePage = () => {
                 });
               }
             } else {
-              // Process children only if they exist
               if (element.childNodes && element.childNodes.length > 0) {
                 Array.from(element.childNodes).forEach(child => {
                   try {
@@ -444,12 +557,11 @@ const HomePage = () => {
                   }
                 });
               } else if (element.textContent?.trim()) {
-                // If no children but has text, create a paragraph
-                result.push({
-                  type: 'paragraph' as const,
-                  content: element.textContent.trim()
-                });
-              }
+                  result.push({
+                    type: 'paragraph' as const,
+                    content: element.textContent.trim()
+                  });
+                }
             }
           }
           
@@ -463,7 +575,6 @@ const HomePage = () => {
           }
         });
         
-        // If no blocks were created, create a paragraph with the text content
         if (blocks.length === 0 && body.textContent) {
           blocks.push({
             type: 'paragraph' as const,
@@ -473,36 +584,38 @@ const HomePage = () => {
       }
 
       if (blocks.length === 0) {
-            alert('No content to import');
+        alert('No content to import');
         return;
       }
 
-      // Save to localStorage first
       const contentStr = JSON.stringify(blocks, null, 2);
-      localStorage.setItem(STORAGE_KEY, contentStr);
       
-      // Replace editor content with imported blocks
+      if (!currentDocumentId) {
+        alert('Please select or create a document first');
+        return;
+      }
+      
+      // Save directly to localStorage with explicit key
+      const storageKey = `document-${currentDocumentId}`;
+      localStorage.setItem(storageKey, contentStr);
+      saveDocumentContent(currentDocumentId, contentStr);
+      
       try {
         const currentBlocks = editorRef.current.topLevelBlocks;
         if (currentBlocks && Array.isArray(currentBlocks) && currentBlocks.length > 0) {
-          // Replace existing blocks
           editorRef.current.replaceBlocks(currentBlocks, blocks);
         } else {
-          // If editor is empty or blocks are invalid, reload the page with new content
           setInitialContent(contentStr);
-          window.location.reload();
+          setEditorKey(`${currentDocumentId}-${Date.now()}`);
           return;
         }
 
-        // Update initial content for next render
         setInitialContent(contentStr);
-        
         alert('Content imported successfully');
       } catch (replaceError) {
         console.error('Replace blocks error:', replaceError);
-        // Fallback: reload page with new content
         setInitialContent(contentStr);
-        window.location.reload();
+        setEditorKey(`${currentDocumentId}-${Date.now()}`);
       }
     } catch (error) {
       console.error('Import error:', error);
@@ -512,18 +625,22 @@ const HomePage = () => {
 
   // Handle clear content
   const handleClearContent = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setInitialContent(undefined);
+    if (!currentDocumentId) return;
+    
+    const emptyContent = JSON.stringify([{ type: "paragraph" as const, content: "" }]);
+    const storageKey = `document-${currentDocumentId}`;
+    localStorage.setItem(storageKey, emptyContent);
+    saveDocumentContent(currentDocumentId, emptyContent);
+    setInitialContent(emptyContent);
+    
     if (editorRef.current) {
-      // Clear all blocks by replacing with empty paragraph
       try {
         editorRef.current.replaceBlocks(
           editorRef.current.topLevelBlocks,
           [{ type: "paragraph" as const, content: "" }]
         );
       } catch (error) {
-        // Fallback: just reload the page
-        window.location.reload();
+        setEditorKey(`${currentDocumentId}-${Date.now()}`);
       }
     }
   };
@@ -538,18 +655,8 @@ const HomePage = () => {
       }
     };
 
-    // Listen for storage events (from other tabs/windows)
     window.addEventListener('storage', handleStorageChange);
 
-    // Also listen for custom storage events (from same tab)
-    const handleCustomStorage = () => {
-      const savedWidth = localStorage.getItem('editor-width');
-      if (savedWidth && ['narrow', 'medium', 'wide', 'full'].includes(savedWidth)) {
-        setEditorWidth(savedWidth as 'narrow' | 'medium' | 'wide' | 'full');
-      }
-    };
-
-    // Check localStorage periodically (as fallback, since custom events aren't always reliable)
     const interval = setInterval(() => {
       const savedWidth = localStorage.getItem('editor-width');
       if (savedWidth && ['narrow', 'medium', 'wide', 'full'].includes(savedWidth)) {
@@ -559,9 +666,11 @@ const HomePage = () => {
       }
       
       const savedAutoSave = localStorage.getItem('editor-autoSave');
-      if (savedAutoSave !== null && savedAutoSave !== String(autoSave)) {
+      if (savedAutoSave !== null) {
         const autoSaveValue = savedAutoSave === 'true';
-        setAutoSave(autoSaveValue);
+        if (savedAutoSave !== String(autoSave)) {
+          setAutoSave(autoSaveValue);
+        }
         autoSaveRef.current = autoSaveValue;
       }
     }, 500);
@@ -575,6 +684,11 @@ const HomePage = () => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      // Save current document before unmount
+      if (previousDocumentIdRef.current && editorRef.current && pendingSaveRef.current) {
+        saveCurrentDocumentContent(previousDocumentIdRef.current, pendingSaveRef.current);
+      }
+      
       if (editorRef.current) {
         const tiptapEditor = (editorRef.current as any)._tiptapEditor;
         const updateState = (editorRef.current as any).__updateState;
@@ -584,32 +698,47 @@ const HomePage = () => {
         }
       }
     };
-  }, []);
+  }, [saveCurrentDocumentContent]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header 
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onClearContent={handleClearContent}
-        onExport={handleExport}
-        onImport={handleImport}
-      />
-      <div className={`mx-auto pt-10 pb-24 px-4 border-border min-h-[calc(100vh-3.5rem)] ${
-        editorWidth === 'narrow' ? 'max-w-2xl' :
-        editorWidth === 'medium' ? 'max-w-4xl' :
-        editorWidth === 'wide' ? 'max-w-6xl' :
-        'max-w-full'
-      }`}>
-        {isLoaded && (
-          <Editor 
-            onEditorReady={handleEditorReady}
-            initialContent={initialContent}
-            onChange={handleContentChange}
-          />
-        )}
+    <div className="min-h-screen bg-background flex">
+      {sidebarOpen && <Sidebar onToggle={toggleSidebar} />}
+      <div className={`flex-1 flex flex-col min-w-0 ${sidebarOpen ? 'ml-64' : ''}`}>
+        <Header 
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onClearContent={handleClearContent}
+          onExport={handleExport}
+          onImport={handleImport}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={toggleSidebar}
+        />
+        <div className={`mx-auto pt-10 pb-24 px-4 min-h-[calc(100vh-3.5rem)] w-full ${
+          editorWidth === 'narrow' ? 'max-w-2xl' :
+          editorWidth === 'medium' ? 'max-w-4xl' :
+          editorWidth === 'wide' ? 'max-w-6xl' :
+          'max-w-full'
+        }`}>
+          {isLoaded && isContentLoaded && documentsLoaded && (
+            currentDocumentId ? (
+              <Editor 
+                key={editorKey || currentDocumentId}
+                onEditorReady={handleEditorReady}
+                initialContent={initialContent}
+                onChange={handleContentChange}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <p className="text-muted-foreground mb-4">No document selected</p>
+                  <p className="text-sm text-muted-foreground">Create a new page from the sidebar</p>
+                </div>
+              </div>
+            )
+          )}
+        </div>
       </div>
     </div>
   );

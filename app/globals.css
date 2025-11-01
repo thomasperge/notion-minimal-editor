@@ -112,3 +112,18 @@ body,
   background-color: #191919 !important;
   color: hsl(var(--foreground)) !important;
 }
+
+/* Ensure editor elements stay below header */
+.bn-editor,
+.bn-editor *,
+[class*="mantine"],
+[class*="ProseMirror"] {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure header stays on top */
+header {
+  position: relative;
+  z-index: 100 !important;
+}

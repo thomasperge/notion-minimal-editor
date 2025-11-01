@@ -39,23 +39,59 @@ export const SettingsDialog = ({
   useEffect(() => {
     const calculateStorage = () => {
       try {
-        const content = localStorage.getItem('editor-content') || '';
-        const sizeInBytes = new Blob([content]).size;
-        const sizeInKB = (sizeInBytes / 1024).toFixed(2);
-        setStorageSize(sizeInKB + ' KB');
+        // Calculate total storage from all documents
+        const documentsList = localStorage.getItem('documents-list');
+        let totalSize = 0;
+        let totalCharacters = 0;
+        let totalBlocks = 0;
 
-        // Count characters and blocks
-        if (content) {
-          try {
-            const parsed = JSON.parse(content);
-            setBlockCount(Array.isArray(parsed) ? parsed.length : 0);
-            setCharacterCount(content.length);
-          } catch {
-            setCharacterCount(content.length);
+        if (documentsList) {
+          const docs = JSON.parse(documentsList);
+          if (Array.isArray(docs)) {
+            docs.forEach((doc: any) => {
+              const content = localStorage.getItem(`document-${doc.id}`) || '';
+              const sizeInBytes = new Blob([content]).size;
+              totalSize += sizeInBytes;
+              totalCharacters += content.length;
+
+              if (content) {
+                try {
+                  const parsed = JSON.parse(content);
+                  if (Array.isArray(parsed)) {
+                    totalBlocks += parsed.length;
+                  }
+                } catch {
+                  // Ignore parse errors
+                }
+              }
+            });
           }
         }
+
+        // Also check old format for migration
+        const oldContent = localStorage.getItem('editor-content');
+        if (oldContent) {
+          const sizeInBytes = new Blob([oldContent]).size;
+          totalSize += sizeInBytes;
+          totalCharacters += oldContent.length;
+          try {
+            const parsed = JSON.parse(oldContent);
+            if (Array.isArray(parsed)) {
+              totalBlocks += parsed.length;
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
+        const sizeInKB = (totalSize / 1024).toFixed(2);
+        setStorageSize(sizeInKB + ' KB');
+        setCharacterCount(totalCharacters);
+        setBlockCount(totalBlocks);
       } catch (error) {
         setStorageSize('0 KB');
+        setCharacterCount(0);
+        setBlockCount(0);
       }
     };
     calculateStorage();
@@ -317,7 +353,7 @@ export const SettingsDialog = ({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Version</span>
-                      <span className="font-medium">1.0.0</span>
+                      <span className="font-medium">1.2.0</span>
                     </div>
                   </div>
                 </div>

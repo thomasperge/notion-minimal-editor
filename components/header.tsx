@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Undo2, Redo2, Sun, Moon, User } from "lucide-react";
+import { Undo2, Redo2, Sun, Moon, User, PanelLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingsDialog } from "./settings-dialog";
 
@@ -13,6 +13,8 @@ interface HeaderProps {
   onClearContent?: () => void;
   onExport?: (format: 'json' | 'markdown' | 'html') => void;
   onImport?: (content: string, format: 'json' | 'markdown' | 'html') => void;
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const Header = ({ 
@@ -22,7 +24,9 @@ export const Header = ({
   canRedo = false,
   onClearContent,
   onExport,
-  onImport
+  onImport,
+  sidebarOpen = true,
+  onToggleSidebar
 }: HeaderProps) => {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -38,12 +42,27 @@ export const Header = ({
 
   return (
     <header 
-      className={`sticky top-0 z-50 w-full border-b backdrop-blur ${mounted && resolvedTheme === "dark" ? "bg-[#202020]" : "bg-background/95"}`} 
+      className={`sticky top-0 z-[100] w-full border-b backdrop-blur ${mounted && resolvedTheme === "dark" ? "bg-[#202020]" : "bg-background/95"}`} 
       style={mounted && resolvedTheme === "dark" ? { backgroundColor: "#202020" } : undefined}
     >
-      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-end gap-4">
-        {/* Undo/Redo */}
-        <div className="flex items-center gap-2">
+      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+        {/* Left side - Sidebar toggle when closed */}
+        <div className="flex items-center">
+          {!sidebarOpen && onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className="p-2 rounded-md hover:bg-muted transition-colors"
+              aria-label="Open sidebar"
+            >
+              <PanelLeft className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+
+        {/* Right side - Undo/Redo and other actions */}
+        <div className="flex items-center gap-4">
+          {/* Undo/Redo */}
+          <div className="flex items-center gap-2">
           <button
             onClick={onUndo}
             disabled={!canUndo}
@@ -86,6 +105,7 @@ export const Header = ({
         >
           <User className="h-5 w-5 text-white" />
         </button>
+        </div>
       </div>
 
       <SettingsDialog
