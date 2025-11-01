@@ -122,6 +122,35 @@ body,
   z-index: 1;
 }
 
+/* Fix BlockNote/Mantine dropdown menus z-index to appear above toolbar */
+/* Target all Mantine dropdowns and menus */
+[class*="mantine-Popover-dropdown"],
+[class*="mantine-Menu-dropdown"],
+[class*="mantine-Select-dropdown"],
+[class*="mantine-Combobox-dropdown"] {
+  z-index: 1000 !important;
+  position: absolute !important;
+}
+
+/* Target dropdowns within BlockNote editor specifically */
+.bn-editor [class*="mantine-Popover-dropdown"],
+.bn-editor [class*="mantine-Menu-dropdown"],
+.bn-editor [class*="mantine-Select-dropdown"],
+.bn-editor [role="menu"],
+.bn-editor [role="listbox"],
+.bn-editor [role="combobox"],
+.bn-editor [role="dialog"] {
+  z-index: 1000 !important;
+}
+
+/* Target portal-based dropdowns (Mantine renders them outside the editor) */
+body > [class*="mantine-Popover-dropdown"],
+body > [class*="mantine-Menu-dropdown"],
+body > [class*="mantine-Select-dropdown"],
+[data-mantine-portal] {
+  z-index: 1000 !important;
+}
+
 /* Ensure header stays on top */
 header {
   position: relative;
