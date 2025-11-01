@@ -1,71 +1,102 @@
-# Fullstack Notion Clone: Next.js 13, React, Convex, Tailwind 
+# Notion Minimal Editor
 
-<!-- ![Copy of Copy of Copy of Fullstack Twitter Clone (6)](https://github.com/AntonioErdeljac/notion-clone-tutorial/assets/23248726/66bcfca3-93bf-4aa4-950d-f98c020e1156)
- -->
+A minimal Notion-like editor powered by BlockNote and Next.js. Focus on writing without the complexity.
 
-This is a repository for Fullstack Notion Clone: Next.js 13, React, Convex, Tailwind 
+## ✨ Features
 
+- 📝 **Rich Text Editor** - Powered by BlockNote with full Notion-style editing
+- 🌓 **Dark Mode** - Beautiful dark and light themes
+- 💾 **Local Storage** - Auto-save your content in the browser
+- 📥 **Import Options** - Import content from JSON, Markdown, or HTML files or paste from clipboard
+- 📤 **Export Options** - Export your documents as JSON, Markdown, or HTML
+- ⚡ **Undo/Redo** - Full history support
+- 🎨 **Customizable Width** - Adjust editor width (Narrow, Medium, Wide, Full)
+- 🖼️ **Image Support** - Paste and insert images directly
+- ⚙️ **Settings Dialog** - Customize your editor experience
 
-Key Features:
-
-- Real-time database  🔗 
-- Notion-style editor 📝 
-- Light and Dark mode 🌓
-- Infinite children documents 🌲
-- Trash can & soft delete 🗑️
-- Authentication 🔐 
-- File upload
-- File deletion
-- File replacement
-- Icons for each document (changes in real-time) 🌠
-- Expandable sidebar ➡️🔀⬅️
-- Full mobile responsiveness 📱
-- Publish your note to the web 🌐
-- Fully collapsable sidebar ↕️
-- Landing page 🛬
-- Cover image of each document 🖼️
-- Recover deleted files 🔄📄
+## 🚀 Getting Started
 
 ### Prerequisites
 
-**Node version 18.x.x**
+- Node.js 18.x or higher
+- npm or yarn
 
-### Cloning the repository
+### Installation
 
-```shell
-git clone https://github.com/AntonioErdeljac/notion-clone-tutorial.git
+1. Clone the repository:
+```bash
+git clone https://github.com/thomasperge/notion-minimal-editor.git
+cd notion-minimal-editor
 ```
 
-### Install packages
-
-```shell
-npm i
+2. Install dependencies:
+```bash
+npm install
 ```
 
-### Setup .env file
-
-
-```js
-# Deployment used by `npx convex dev`
-CONVEX_DEPLOYMENT=
-NEXT_PUBLIC_CONVEX_URL=
-
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-
-EDGE_STORE_ACCESS_KEY=
-EDGE_STORE_SECRET_KEY=
-```
-
-### Setup Convex
-
-```shell
-npx convex dev
-
-```
-
-### Start the app
-
-```shell
+3. Start the development server:
+```bash
 npm run dev
 ```
+
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 🛠️ Built With
+
+- [Next.js 13](https://nextjs.org/) - React framework
+- [React 18](https://react.dev/) - UI library
+- [BlockNote](https://www.blocknotejs.org/) - Block-based editor
+- [TypeScript](https://www.typescriptlang.org/) - Type safety
+- [Tailwind CSS](https://tailwindcss.com/) - Styling
+- [Radix UI](https://www.radix-ui.com/) - UI components
+- [next-themes](https://github.com/pacocoursey/next-themes) - Theme management
+
+## 📖 Usage
+
+### Writing
+
+Start typing to create content. The editor supports:
+- Headings (H1, H2, H3)
+- Bullet lists
+- Numbered lists
+- Bold, italic, and underline
+- Links
+- Images (paste or drag & drop)
+
+### Keyboard Shortcuts
+
+- `Ctrl/Cmd + Z` - Undo
+- `Ctrl/Cmd + Shift + Z` - Redo
+- `Ctrl/Cmd + B` - Bold
+- `Ctrl/Cmd + I` - Italic
+- `/` - Open slash command menu
+
+### Import Content
+
+You can import content from various formats:
+- **Import from file**: Click the avatar icon → Settings → Import, then choose JSON, Markdown, or HTML
+- **Paste from clipboard**: Click "Coller" in the Import section to paste content (automatically detects format)
+
+Supported formats:
+- **JSON**: BlockNote JSON format
+- **Markdown**: Standard Markdown files (.md)
+- **HTML**: HTML documents
+
+### Settings
+
+Click the avatar icon in the header to access settings:
+- Import content (JSON, Markdown, HTML files or clipboard)
+- Adjust editor width
+- Toggle auto-save
+- Export content (JSON, Markdown, HTML)
+- Clear content
+- View statistics
+
+## 📝 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+## 🙏 Acknowledgments
+
+- [BlockNote](https://www.blocknotejs.org/) for the amazing editor
+- Original inspiration from [Notion](https://www.notion.so/)
