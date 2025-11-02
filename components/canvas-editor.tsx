@@ -23,8 +23,11 @@ import { EditableNode } from "./editable-node";
 import { TextInputNode } from "./nodes/text-input-node";
 import { ImageInputNode } from "./nodes/image-input-node";
 import { NumberInputNode } from "./nodes/number-input-node";
+import { TodoListNode } from "./nodes/todo-list-node";
 import { PropertiesPanel } from "./properties-panel";
 import { BlockSearchMenu } from "./block-search-menu";
+import { useAlignmentGuides } from "./alignment-guides";
+import { PanelRightClose, PanelRight } from "lucide-react";
 
 interface CanvasEditorProps {
   onChange?: (nodesJson: string) => void;
@@ -43,6 +46,7 @@ const CanvasEditor = ({
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [blockMenuPosition, setBlockMenuPosition] = useState<{ x: number; y: number } | undefined>();
+  const [propertiesPanelOpen, setPropertiesPanelOpen] = useState(true);
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
 
   // Define node types
@@ -51,6 +55,7 @@ const CanvasEditor = ({
     textInput: TextInputNode as any,
     imageInput: ImageInputNode as any,
     numberInput: NumberInputNode as any,
+    todoList: TodoListNode as any,
   }), []);
 
   // Parse initial content
@@ -62,8 +67,8 @@ const CanvasEditor = ({
           // Filter out edges with invalid handle IDs
           const validEdges = parsed.edges.filter((edge: Edge) => {
             // Only allow connections between valid handle IDs
-            const validSourceHandles = ['text-output', 'image-output', 'number-output', 'default-output'];
-            const validTargetHandles = ['text-input', 'image-input', 'number-input', 'default-input'];
+            const validSourceHandles = ['text-output', 'image-output', 'number-output', 'todo-output', 'default-output'];
+            const validTargetHandles = ['text-input', 'image-input', 'number-input', 'todo-input', 'default-input'];
 
             const hasValidSource = !edge.sourceHandle || validSourceHandles.includes(edge.sourceHandle);
             const hasValidTarget = !edge.targetHandle || validTargetHandles.includes(edge.targetHandle);
@@ -147,13 +152,18 @@ const CanvasEditor = ({
     [setEdges]
   );
 
-  // Handle block search menu (triggered by "/" or other shortcut)
+  // Handle block search menu (triggered by "/" or other shortcut) and node deletion
   useEffect(() => {
     if (!editable) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle shortcuts when user is editing text
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") {
+        return;
+      }
+
       // Open block menu with "/"
-      if (e.key === "/" && !showBlockMenu && document.activeElement?.tagName !== "INPUT") {
+      if (e.key === "/" && !showBlockMenu) {
         e.preventDefault();
         // Center the menu on screen
         setBlockMenuPosition({
@@ -162,11 +172,21 @@ const CanvasEditor = ({
         });
         setShowBlockMenu(true);
       }
+
+      // Delete selected nodes with Delete or Backspace
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedNode) {
+        e.preventDefault();
+        // Remove the node
+        setNodes((nds) => nds.filter((node) => node.id !== selectedNode.id));
+        // Remove connected edges
+        setEdges((eds) => eds.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id));
+        setSelectedNode(null);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editable, showBlockMenu]);
+  }, [editable, showBlockMenu, selectedNode, setNodes, setEdges]);
 
   // Handle paste image (Ctrl+V or Cmd+V) - will be handled in CanvasContent
   const handlePasteImageRef = useRef<((imageUrl: string) => void) | null>(null);
@@ -220,6 +240,18 @@ const CanvasEditor = ({
       );
     },
     [setNodes]
+  );
+
+  // Handle node deletion from properties panel
+  const handleNodeDelete = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+      setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+      if (selectedNode?.id === nodeId) {
+        setSelectedNode(null);
+      }
+    },
+    [setNodes, setEdges, selectedNode]
   );
 
   const isDark = resolvedTheme === "dark";
@@ -298,8 +330,32 @@ const CanvasEditor = ({
   };
 
   // Inner component to use ReactFlow hooks
-  const CanvasContent = ({ hasSelectedNode }: { hasSelectedNode: boolean }) => {
-    const { screenToFlowPosition } = useReactFlow();
+  const CanvasContent = ({ hasSelectedNode, propertiesPanelOpen, onTogglePropertiesPanel }: { hasSelectedNode: boolean; propertiesPanelOpen: boolean; onTogglePropertiesPanel: () => void }) => {
+    const { screenToFlowPosition, getViewport, flowToScreenPosition } = useReactFlow();
+    const { guides, snapPosition, handleNodeDrag, handleNodeDragStop } = useAlignmentGuides(nodes);
+    
+    // Enhanced onNodesChange avec snap
+    const onNodesChangeWithSnap = useCallback((changes: any) => {
+      // Mettre à jour les nodes localement pour que snapPosition ait les dernières positions
+      const updatedNodes = nodes.map(node => {
+        const change = changes.find((c: any) => c.id === node.id && c.type === "position");
+        if (change && change.position) {
+          return { ...node, position: change.position };
+        }
+        return node;
+      });
+      
+      changes.forEach((change: any) => {
+        if (change.type === "position" && change.position && change.dragging) {
+          const node = updatedNodes.find((n) => n.id === change.id);
+          if (node) {
+            const snappedPos = snapPosition(node, change.position);
+            change.position = snappedPos;
+          }
+        }
+      });
+      onNodesChange(changes);
+    }, [nodes, onNodesChange, snapPosition]);
 
     const handleSelectBlockWithPosition = useCallback(
       (blockType: string) => {
@@ -316,6 +372,8 @@ const CanvasEditor = ({
           defaultData = { imageUrl: "" };
         } else if (blockType === "numberInput") {
           defaultData = { number: undefined };
+        } else if (blockType === "todoList") {
+          defaultData = { items: [] };
         }
 
         const newNode: Node = {
@@ -355,15 +413,31 @@ const CanvasEditor = ({
       <div
         className="relative h-full overflow-hidden"
         style={{
-          width: 'calc(100% - 320px)', // Make space for sidebar
+          width: propertiesPanelOpen ? 'calc(100% - 320px)' : '100%', // Make space for sidebar if open
         }}
       >
+        {/* Properties Panel Toggle Button - Top Right */}
+        <button
+          onClick={onTogglePropertiesPanel}
+          className="absolute top-4 right-4 z-[100] p-2 rounded-md bg-white/95 dark:bg-[#191919] backdrop-blur-sm border border-stone-300 dark:border-stone-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm"
+          aria-label={propertiesPanelOpen ? "Hide properties panel" : "Show properties panel"}
+          title={propertiesPanelOpen ? "Hide properties panel" : "Show properties panel"}
+        >
+          {propertiesPanelOpen ? (
+            <PanelRightClose className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+          ) : (
+            <PanelRight className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+          )}
+        </button>
+        
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
+          onNodesChange={onNodesChangeWithSnap}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDrag={handleNodeDrag}
+          onNodeDragStop={handleNodeDragStop}
           nodeTypes={nodeTypes}
           nodesDraggable={editable}
           nodesConnectable={editable}
@@ -371,17 +445,59 @@ const CanvasEditor = ({
           connectionMode={ConnectionMode.Loose}
           isValidConnection={isValidConnection}
           minZoom={0.1}
-          maxZoom={10}
+          maxZoom={2}
           zoomOnScroll={true}
           panOnDrag={true}
           autoPanOnNodeDrag={true}
           fitView={false}
-          defaultViewport={viewportRef.current} // initial viewport
+          proOptions={{ hideAttribution: true }}
+          defaultViewport={viewportRef.current}
           onMove={(event, newViewport) => {
-            viewportRef.current = newViewport; // met à jour le ref sans bloquer le drag
+            viewportRef.current = newViewport;
           }}
         >
           <Background gap={12} color={isDark ? "#444" : "#d4d4d4"} size={1} />
+          
+          {/* Alignment Guides */}
+          <Panel position="top-left" className="pointer-events-none z-10">
+            {guides.length > 0 && (
+              <div className="absolute inset-0" style={{ width: '100vw', height: '100vh' }}>
+                {guides.map((guide) => {
+                  const viewport = getViewport();
+                  
+                  if (guide.orientation === "horizontal") {
+                    const screenPos = flowToScreenPosition({ x: 0, y: guide.position });
+                    return (
+                      <div
+                        key={guide.id}
+                        className="absolute left-0 right-0"
+                        style={{
+                          top: `${screenPos.y}px`,
+                          height: '2px',
+                          background: 'linear-gradient(to right, transparent, #3b82f6 20%, #3b82f6 80%, transparent)',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    );
+                  } else {
+                    const screenPos = flowToScreenPosition({ x: guide.position, y: 0 });
+                    return (
+                      <div
+                        key={guide.id}
+                        className="absolute top-0 bottom-0"
+                        style={{
+                          left: `${screenPos.x}px`,
+                          width: '2px',
+                          background: 'linear-gradient(to bottom, transparent, #3b82f6 20%, #3b82f6 80%, transparent)',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    );
+                  }
+                })}
+              </div>
+            )}
+          </Panel>
         </ReactFlow>
 
         {/* Add Node Button - Bottom Center */}
@@ -434,12 +550,16 @@ const CanvasEditor = ({
       data-testid="canvas-editor-container"
     >
       <ReactFlowProvider>
-        <CanvasContent hasSelectedNode={!!selectedNode} />
+        <CanvasContent 
+          hasSelectedNode={!!selectedNode} 
+          propertiesPanelOpen={propertiesPanelOpen}
+          onTogglePropertiesPanel={() => setPropertiesPanelOpen(!propertiesPanelOpen)}
+        />
         {/* Zoom Controls - Positioned relative to canvas, not sidebar */}
         <div
           className="absolute bottom-4 z-[100] pointer-events-auto"
           style={{
-            right: '336px', // 320px (sidebar) + 16px margin from canvas edge
+            right: propertiesPanelOpen ? '336px' : '16px', // 320px (sidebar) + 16px margin from canvas edge, or just 16px if closed
             bottom: '16px',
           }}
           data-testid="zoom-controls-fixed"
@@ -449,7 +569,13 @@ const CanvasEditor = ({
       </ReactFlowProvider>
 
       {/* Properties Panel */}
-      <PropertiesPanel selectedNode={selectedNode} onNodeChange={handleNodeChange} />
+      {propertiesPanelOpen && (
+        <PropertiesPanel 
+          selectedNode={selectedNode} 
+          onNodeChange={handleNodeChange}
+          onNodeDelete={handleNodeDelete}
+        />
+      )}
     </div>
   );
 };

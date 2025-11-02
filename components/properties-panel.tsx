@@ -2,14 +2,15 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Node } from "@xyflow/react";
-import { Play, MoreVertical } from "lucide-react";
+import { Play, MoreVertical, Trash2, X } from "lucide-react";
 
 interface PropertiesPanelProps {
   selectedNode: Node | null;
   onNodeChange?: (nodeId: string, data: any) => void;
+  onNodeDelete?: (nodeId: string) => void;
 }
 
-export const PropertiesPanel = ({ selectedNode, onNodeChange }: PropertiesPanelProps) => {
+export const PropertiesPanel = ({ selectedNode, onNodeChange, onNodeDelete }: PropertiesPanelProps) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [localText, setLocalText] = useState("");
 
@@ -48,6 +49,24 @@ export const PropertiesPanel = ({ selectedNode, onNodeChange }: PropertiesPanelP
       case "textInput":
         return (
           <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">
+                Text type
+              </label>
+              <select
+                value={(typeof nodeData.textType === "string" ? nodeData.textType : "text") as string}
+                onChange={(e) => {
+                  if (onNodeChange) {
+                    onNodeChange(selectedNode.id, { ...nodeData, textType: e.target.value });
+                  }
+                }}
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="text">Texte</option>
+                <option value="h1">Heading 1</option>
+                <option value="h2">Heading 2</option>
+              </select>
+            </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-2 block">
                 Text
@@ -115,6 +134,88 @@ export const PropertiesPanel = ({ selectedNode, onNodeChange }: PropertiesPanelP
           </div>
         );
 
+      case "todoList":
+        const items = Array.isArray(nodeData.items) ? nodeData.items : [];
+        return (
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Items ({items.length})
+                </label>
+                <button
+                  onClick={() => {
+                    if (onNodeChange) {
+                      const newItem = {
+                        id: `item-${Date.now()}`,
+                        text: "",
+                        checked: false,
+                      };
+                      onNodeChange(selectedNode.id, { ...nodeData, items: [...items, newItem] });
+                    }
+                  }}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                >
+                  + Add
+                </button>
+              </div>
+              <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+                {items.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4 border border-dashed border-gray-300 dark:border-gray-700 rounded">
+                    No items. Click "+ Add" to get started.
+                  </div>
+                ) : (
+                  items.map((item: any, index: number) => (
+                    <div key={item?.id || index} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={item?.checked || false}
+                        onChange={(e) => {
+                          if (onNodeChange) {
+                            const updatedItems = items.map((it: any) =>
+                              it?.id === item?.id ? { ...it, checked: e.target.checked } : it
+                            );
+                            onNodeChange(selectedNode.id, { ...nodeData, items: updatedItems });
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={item?.text || ""}
+                        onChange={(e) => {
+                          if (onNodeChange) {
+                            const updatedItems = items.map((it: any) =>
+                              it?.id === item?.id ? { ...it, text: e.target.value } : it
+                            );
+                            onNodeChange(selectedNode.id, { ...nodeData, items: updatedItems });
+                          }
+                        }}
+                        className={`flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-background text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          item?.checked ? "line-through opacity-60" : ""
+                        }`}
+                        placeholder={`Item ${index + 1}...`}
+                      />
+                      <button
+                        onClick={() => {
+                          if (onNodeChange) {
+                            const updatedItems = items.filter((it: any) => it?.id !== item?.id);
+                            onNodeChange(selectedNode.id, { ...nodeData, items: updatedItems });
+                          }
+                        }}
+                        className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                        title="Delete"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="text-sm text-muted-foreground">
@@ -132,6 +233,8 @@ export const PropertiesPanel = ({ selectedNode, onNodeChange }: PropertiesPanelP
         return "Image Input";
       case "numberInput":
         return "Number Input";
+      case "todoList":
+        return "Todo List";
       default:
         return "Node";
     }
@@ -153,6 +256,12 @@ export const PropertiesPanel = ({ selectedNode, onNodeChange }: PropertiesPanelP
             #
           </span>
         );
+      case "todoList":
+        return (
+          <span className="text-xs font-semibold bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded">
+            ✓
+          </span>
+        );
       default:
         return null;
     }
@@ -167,18 +276,88 @@ export const PropertiesPanel = ({ selectedNode, onNodeChange }: PropertiesPanelP
           <h3 className="text-sm font-semibold">{getNodeTitle()}</h3>
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-1.5 hover:bg-muted rounded transition-colors">
-            <Play className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <button className="p-1.5 hover:bg-muted rounded transition-colors">
-            <MoreVertical className="h-4 w-4 text-muted-foreground" />
-          </button>
+          {onNodeDelete && (
+            <button
+              onClick={() => {
+                if (selectedNode && onNodeDelete) {
+                  onNodeDelete(selectedNode.id);
+                }
+              }}
+              className="p-1.5 hover:bg-destructive/10 dark:hover:bg-destructive/20 rounded transition-colors"
+              title="Delete node (Delete)"
+            >
+              <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {renderNodeProperties()}
+        
+        {/* Border Color Section - Common for all node types */}
+        <div className="pt-4 border-t">
+          <label className="text-xs font-medium text-muted-foreground mb-2.5 block">
+            Border color
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {/* Default (no color) */}
+            <button
+              onClick={() => {
+                if (onNodeChange) {
+                  const { borderColor, ...restData } = nodeData;
+                  onNodeChange(selectedNode.id, restData);
+                }
+              }}
+              className={`w-7 h-7 rounded border transition-all ${
+                !nodeData.borderColor 
+                  ? "border-gray-700 dark:border-gray-300 bg-gray-100 dark:bg-gray-800" 
+                  : "border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
+              }`}
+              style={{
+                backgroundImage: !nodeData.borderColor 
+                  ? 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)'
+                  : 'none',
+                backgroundSize: '6px 6px',
+                backgroundPosition: '0 0, 0 3px, 3px -3px, -3px 0px'
+              }}
+              title="Default"
+            />
+            
+            {/* Predefined colors */}
+            {[
+              { name: "Red", color: "#ef4444" },
+              { name: "Orange", color: "#f97316" },
+              { name: "Amber", color: "#f59e0b" },
+              { name: "Yellow", color: "#eab308" },
+              { name: "Green", color: "#22c55e" },
+              { name: "Emerald", color: "#10b981" },
+              { name: "Cyan", color: "#06b6d4" },
+              { name: "Blue", color: "#3b82f6" },
+              { name: "Indigo", color: "#6366f1" },
+              { name: "Violet", color: "#8b5cf6" },
+              { name: "Pink", color: "#ec4899" },
+              { name: "Gray", color: "#6b7280" },
+            ].map(({ name, color }) => (
+              <button
+                key={color}
+                onClick={() => {
+                  if (onNodeChange) {
+                    onNodeChange(selectedNode.id, { ...nodeData, borderColor: color });
+                  }
+                }}
+                className={`w-7 h-7 rounded border transition-all ${
+                  nodeData.borderColor === color
+                    ? "border-gray-700 dark:border-gray-300 ring-1 ring-offset-1 ring-gray-400 dark:ring-gray-500" 
+                    : "border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
+                }`}
+                style={{ backgroundColor: color }}
+                title={name}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </aside>
   );

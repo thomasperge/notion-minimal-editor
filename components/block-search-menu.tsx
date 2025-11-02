@@ -33,6 +33,13 @@ const AVAILABLE_BLOCKS: Block[] = [
     icon: "#",
     description: "Input a number value.",
   },
+  {
+    id: "todoList",
+    type: "todoList",
+    name: "Todo List",
+    icon: "✅",
+    description: "Create a checklist with items to validate.",
+  },
 ];
 
 interface BlockSearchMenuProps {

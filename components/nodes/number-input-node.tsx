@@ -2,23 +2,24 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, useReactFlow } from "@xyflow/react";
-import { ChevronDown, MoreVertical } from "lucide-react";
 
-interface NumberInputNodeData {
+interface NumberInputNodeData extends Record<string, unknown> {
   number?: number;
+  borderColor?: string;
 }
 
-export const NumberInputNode = ({ id, data, selected }: NodeProps<NumberInputNodeData>) => {
+export const NumberInputNode = ({ id, data, selected }: any) => {
   const { setNodes } = useReactFlow();
+  const nodeData = data as NumberInputNodeData;
   const [localNumber, setLocalNumber] = useState<string>(
-    data.number !== undefined ? String(data.number) : ""
+    nodeData.number !== undefined ? String(nodeData.number) : ""
   );
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Sync local number when data changes externally
   useEffect(() => {
-    setLocalNumber(data.number !== undefined ? String(data.number) : "");
-  }, [data.number]);
+    setLocalNumber(nodeData.number !== undefined ? String(nodeData.number) : "");
+  }, [nodeData.number]);
 
   const handleNumberChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
     const value = evt.target.value;
@@ -34,29 +35,16 @@ export const NumberInputNode = ({ id, data, selected }: NodeProps<NumberInputNod
     );
   };
 
+  const borderColor = nodeData.borderColor || (selected ? "rgb(120 113 108)" : "rgb(214 211 209)");
+
   return (
     <div
-      className={`bg-white dark:bg-[#191919] rounded-lg border shadow-lg min-w-[200px] ${
-        selected ? "border-stone-500 dark:border-stone-600" : "border-stone-300 dark:border-stone-700"
-      }`}
-      style={{ overflow: 'visible' }}
+      className="bg-white dark:bg-[#191919] rounded-lg border-2 shadow-lg min-w-[200px]"
+      style={{ 
+        overflow: 'visible',
+        borderColor: borderColor
+      }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-stone-200 dark:border-stone-700">
-        <div className="flex items-center gap-2 flex-1">
-          <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 px-1.5 py-0.5 rounded">
-              #
-            </span>
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Number Input</span>
-          </div>
-        </div>
-        <button className="p-1 hover:bg-gray-100 dark:hover:bg-stone-800 rounded">
-          <MoreVertical className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-        </button>
-      </div>
-
       {/* Content */}
       <div className="p-3 space-y-2">
         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Number</label>
@@ -88,6 +76,13 @@ export const NumberInputNode = ({ id, data, selected }: NodeProps<NumberInputNod
         className="!w-3 !h-3 !bg-orange-500 !border-2 !border-white dark:!border-[#191919]"
         style={{ right: -6, top: '50%', transform: 'translateY(-50%)' }}
       />
+
+      <style>{`
+        .react-flow__node.react-flow__node-numberInput {
+          background: none !important;
+          border: none !important;
+        }
+      `}</style>
     </div>
   );
 };

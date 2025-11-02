@@ -2,21 +2,22 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, useReactFlow } from "@xyflow/react";
-import { ChevronDown, MoreVertical, Image as ImageIcon } from "lucide-react";
 
-interface ImageInputNodeData {
+interface ImageInputNodeData extends Record<string, unknown> {
   imageUrl?: string;
+  borderColor?: string;
 }
 
-export const ImageInputNode = ({ id, data, selected }: NodeProps<ImageInputNodeData>) => {
+export const ImageInputNode = ({ id, data, selected }: any) => {
   const { setNodes } = useReactFlow();
-  const [localImageUrl, setLocalImageUrl] = useState(data.imageUrl || "");
+  const nodeData = data as ImageInputNodeData;
+  const [localImageUrl, setLocalImageUrl] = useState(nodeData.imageUrl || "");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Sync local imageUrl when data changes externally
   useEffect(() => {
-    setLocalImageUrl(data.imageUrl || "");
-  }, [data.imageUrl]);
+    setLocalImageUrl(nodeData.imageUrl || "");
+  }, [nodeData.imageUrl]);
 
   const handleImageUrlChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
     const newUrl = evt.target.value;
@@ -31,27 +32,16 @@ export const ImageInputNode = ({ id, data, selected }: NodeProps<ImageInputNodeD
     );
   };
 
+  const borderColor = nodeData.borderColor || (selected ? "rgb(120 113 108)" : "rgb(214 211 209)");
+
   return (
     <div
-      className={`bg-white dark:bg-[#191919] rounded-lg border shadow-lg min-w-[200px] max-w-[400px] ${
-        selected ? "border-stone-500 dark:border-stone-600" : "border-stone-300 dark:border-stone-700"
-      }`}
-      style={{ overflow: 'visible' }}
+      className="bg-white dark:bg-[#191919] rounded-lg border-2 shadow-lg min-w-[200px] max-w-[400px]"
+      style={{ 
+        overflow: 'visible',
+        borderColor: borderColor
+      }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-stone-200 dark:border-stone-700">
-        <div className="flex items-center gap-2 flex-1">
-          <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-          <div className="flex items-center gap-1.5">
-            <ImageIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Image Input</span>
-          </div>
-        </div>
-        <button className="p-1 hover:bg-gray-100 dark:hover:bg-stone-800 rounded">
-          <MoreVertical className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-        </button>
-      </div>
-
       {/* Content */}
       <div className="p-3 space-y-2">
         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Image URL</label>
@@ -94,6 +84,13 @@ export const ImageInputNode = ({ id, data, selected }: NodeProps<ImageInputNodeD
         className="!w-3 !h-3 !bg-orange-500 !border-2 !border-white dark:!border-[#191919]"
         style={{ right: -6, top: '50%', transform: 'translateY(-50%)' }}
       />
+      
+      <style>{`
+        .react-flow__node.react-flow__node-imageInput {
+          background: none !important;
+          border: none !important;
+        }
+      `}</style>
     </div>
   );
 };

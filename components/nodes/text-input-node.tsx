@@ -2,23 +2,25 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, useReactFlow } from "@xyflow/react";
-import { ChevronDown, MoreVertical } from "lucide-react";
 
-interface TextInputNodeData {
+interface TextInputNodeData extends Record<string, unknown> {
   text?: string;
+  borderColor?: string;
+  textType?: "text" | "h1" | "h2";
 }
 
-export const TextInputNode = ({ id, data, selected }: NodeProps<TextInputNodeData>) => {
+export const TextInputNode = ({ id, data, selected }: any) => {
   const { setNodes } = useReactFlow();
-  const [localText, setLocalText] = useState(data.text || "");
+  const nodeData = data as TextInputNodeData;
+  const [localText, setLocalText] = useState(nodeData.text || "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync local text when data changes externally
   useEffect(() => {
-    setLocalText(data.text || "");
-  }, [data.text]);
+    setLocalText(nodeData.text || "");
+  }, [nodeData.text]);
 
   // Auto-resize textarea width and height
   const adjustTextareaSize = (preserveCursor: boolean = false) => {
@@ -29,9 +31,19 @@ export const TextInputNode = ({ id, data, selected }: NodeProps<TextInputNodeDat
 
     const text = localText || "";
     
+    // Apply text type styles to measure div
+    const fontSize = nodeData.textType === "h1" 
+      ? "1.875rem" 
+      : nodeData.textType === "h2"
+      ? "1.5rem"
+      : "0.875rem";
+    const fontWeight = (nodeData.textType === "h1" || nodeData.textType === "h2") ? "bold" : "normal";
+    
     // Measure text width
     measureRef.current.style.width = 'auto';
     measureRef.current.style.whiteSpace = 'pre-wrap';
+    measureRef.current.style.fontSize = fontSize;
+    measureRef.current.style.fontWeight = fontWeight;
     measureRef.current.textContent = text || ' ';
     
     const textWidth = measureRef.current.scrollWidth;
@@ -98,7 +110,7 @@ export const TextInputNode = ({ id, data, selected }: NodeProps<TextInputNodeDat
     if (textareaRef.current && document.activeElement !== textareaRef.current) {
       adjustTextareaSize(false);
     }
-  }, [localText]);
+  }, [localText, nodeData.textType]);
 
   return (
     <>
@@ -120,29 +132,16 @@ export const TextInputNode = ({ id, data, selected }: NodeProps<TextInputNodeDat
       
       <div
         ref={containerRef}
-        className={`bg-white dark:bg-[#191919] rounded-lg border shadow-lg inline-block ${
-          selected ? "border-stone-500 dark:border-stone-600" : "border-stone-300 dark:border-stone-700"
-        }`}
-        style={{ minWidth: '200px', width: 'auto', overflow: 'visible' }}
+        className="bg-white dark:bg-[#191919] rounded-lg border-2 shadow-lg inline-block"
+        style={{ 
+          minWidth: '200px', 
+          width: 'auto', 
+          overflow: 'visible',
+          borderColor: (nodeData as any).borderColor || (selected ? "rgb(120 113 108)" : "rgb(214 211 209)")
+        }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-stone-200 dark:border-stone-700">
-          <div className="flex items-center gap-2 flex-1">
-            <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 px-1.5 py-0.5 rounded">
-                T
-              </span>
-              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Text Input</span>
-            </div>
-          </div>
-          <button className="p-1 hover:bg-gray-100 dark:hover:bg-stone-800 rounded">
-            <MoreVertical className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-          </button>
-        </div>
-
         {/* Content */}
-        <div className="p-3 space-y-2">
+        <div className="px-2 py-1 space-y-2">
           <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Text</label>
           <textarea
             ref={textareaRef}
@@ -150,11 +149,17 @@ export const TextInputNode = ({ id, data, selected }: NodeProps<TextInputNodeDat
             onChange={handleTextChange}
             placeholder="Enter a value..."
             rows={1}
-            className="w-full px-2 py-1.5 text-sm border border-stone-300 dark:border-stone-600 rounded bg-white dark:bg-[#171717] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-stone-400 dark:focus:ring-stone-500 focus:border-stone-400 dark:focus:border-stone-500 resize-none overflow-hidden"
+            className={`w-full px-2 py-1.5 border border-stone-300 dark:border-stone-600 rounded bg-white dark:bg-[#171717] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-stone-400 dark:focus:ring-stone-500 focus:border-stone-400 dark:focus:border-stone-500 resize-none overflow-hidden ${
+              nodeData.textType === "h1" 
+                ? "text-3xl font-bold" 
+                : nodeData.textType === "h2"
+                ? "text-2xl font-bold"
+                : "text-sm"
+            }`}
             style={{
-              minHeight: '32px',
+              minHeight: nodeData.textType === "h1" ? '48px' : nodeData.textType === "h2" ? '40px' : '32px',
               maxHeight: '200px',
-              lineHeight: '1.25rem',
+              lineHeight: nodeData.textType === "h1" ? '2rem' : nodeData.textType === "h2" ? '1.75rem' : '1.25rem',
               overflowY: 'auto',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -179,6 +184,14 @@ export const TextInputNode = ({ id, data, selected }: NodeProps<TextInputNodeDat
           style={{ right: -6, top: '50%', transform: 'translateY(-50%)' }}
         />
       </div>
+
+
+      <style>{`
+        .react-flow__node.react-flow__node-textInput {
+          background: none !important;
+          border: none !important;
+        }
+      `}</style>
     </>
   );
 };
