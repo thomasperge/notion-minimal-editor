@@ -171,7 +171,7 @@ export default function ViewPage() {
           <h1 className="text-2xl font-semibold">{title}</h1>
           <button
             onClick={copyToClipboard}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
           >
             Copy Text
           </button>

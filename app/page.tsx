@@ -828,8 +828,9 @@ const HomePage = () => {
         if (viewUrl.length > 1500) {
           // For very long URLs, use lower error correction to fit more data
           qrOptions.errorCorrectionLevel = 'L'; // Lowest error correction (can store ~3000 chars)
-          qrOptions.width = 1000; // Very large size for dense QR codes
-          console.log('Using low error correction and very large size for very long URL');
+          qrOptions.width = 1200; // Extra large size for very dense QR codes (better scanning)
+          qrOptions.margin = 0; // No margin to maximize module size
+          console.log('Using low error correction and extra large size (1200px) for very long URL');
         } else if (viewUrl.length > 1000) {
           qrOptions.errorCorrectionLevel = 'M'; // Medium error correction
           qrOptions.width = 800; // Larger size for better scanning
@@ -1007,18 +1008,21 @@ const HomePage = () => {
               <>
                 <div className="flex justify-center mb-3">
                   {qrCodeData.url ? (
-                    <Image 
-                      src={qrCodeData.url} 
-                      alt="QR Code" 
-                      width={400}
-                      height={400}
-                      className="w-full max-w-[400px] h-auto border-2 border-border rounded-lg bg-white p-2"
-                      unoptimized
-                      onError={(e) => {
-                        console.error('QR Code image failed to load:', qrCodeData.url.substring(0, 100));
-                        console.error('Full QR URL length:', qrCodeData.url.length);
-                      }}
-                    />
+                    <div className="w-full max-w-full overflow-auto flex justify-center">
+                      <Image 
+                        src={qrCodeData.url} 
+                        alt="QR Code" 
+                        width={1200}
+                        height={1200}
+                        className="max-w-full h-auto border-2 border-border rounded-lg bg-white p-2"
+                        unoptimized
+                        style={{ imageRendering: 'crisp-edges' }}
+                        onError={(e) => {
+                          console.error('QR Code image failed to load:', qrCodeData.url.substring(0, 100));
+                          console.error('Full QR URL length:', qrCodeData.url.length);
+                        }}
+                      />
+                    </div>
                   ) : (
                     <div className="w-full max-w-[400px] h-[400px] border-2 border-border rounded-lg bg-white p-2 flex items-center justify-center">
                       <p className="text-sm text-muted-foreground">Generating QR code...</p>
