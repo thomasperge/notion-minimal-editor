@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { X, Download, Trash2, FileText, FileCode, FileImage, RefreshCw, Save, Upload, Clipboard, QrCode } from "lucide-react";
+import { X, Download, Trash2, FileText, FileCode, FileImage, RefreshCw, Save, Upload, Clipboard } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface SettingsDialogProps {
@@ -336,40 +336,6 @@ export const SettingsDialog = ({
                       <FileImage className="h-4 w-4" />
                       <span className="text-sm">HTML</span>
                     </button>
-                  </div>
-                </div>
-
-                {/* Send to iPhone */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Send to iPhone</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        console.log('QR Code button clicked');
-                        // Close Settings first, then open QR Code modal
-                        // Radix UI doesn't support nested Dialog.Root, so we must close Settings first
-                        onOpenChange(false);
-                        // Use setTimeout to wait for Settings to close before opening QR Code
-                        // This ensures React has processed the state update
-                        setTimeout(() => {
-                          console.log('Opening QR Code modal after Settings closed');
-                          if (onShowQRCode) {
-                            onShowQRCode();
-                          }
-                        }, 100);
-                      }}
-                      className="flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-md border-2 border-primary bg-primary/10 hover:bg-primary/20 transition-colors text-primary font-medium"
-                      title="Generate QR code to scan with iPhone"
-                    >
-                      <QrCode className="h-5 w-5" />
-                      <span className="text-sm">QR Code</span>
-                    </button>
-                  </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p className="text-center">
-                      Generate QR code and scan with your iPhone camera to get the content
-                    </p>
                   </div>
                 </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Undo2, Redo2, Sun, Moon, User, PanelLeft } from "lucide-react";
+import { Undo2, Redo2, Sun, Moon, User, PanelLeft, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingsDialog } from "./settings-dialog";
 
@@ -94,6 +94,15 @@ export const Header = ({
           ) : (
             <Moon className="h-4 w-4 text-muted-foreground" />
           )}
+        </button>
+
+        {/* Share QR Code */}
+        <button
+          onClick={onShowQRCode}
+          className="p-2 rounded-md hover:bg-muted transition-colors"
+          aria-label="Share with QR Code"
+        >
+          <Share2 className="h-4 w-4 text-muted-foreground" />
         </button>
 
         {/* Separator */}

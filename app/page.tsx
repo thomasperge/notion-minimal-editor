@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/sidebar";
 import { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { useDocumentsContext } from "@/components/providers/documents-provider";
 import * as Dialog from "@radix-ui/react-dialog";
+import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { X } from "lucide-react";
 import * as QRCode from "qrcode";
 
@@ -29,6 +30,8 @@ const HomePage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<{ url: string; title: string; contentLength: number } | null>(null);
+  const [qrErrorOpen, setQrErrorOpen] = useState(false);
+  const [qrErrorMessage, setQrErrorMessage] = useState<string>('');
 
   const {
     currentDocumentId,
@@ -677,14 +680,16 @@ const HomePage = () => {
     console.log('handleShowQRCode called');
     if (!editorRef.current || !currentDocumentId) {
       console.log('No editor or document ID');
-      alert('No content to share');
+      setQrErrorMessage('No content to share');
+      setQrErrorOpen(true);
       return;
     }
 
     const content = getDocumentContent(currentDocumentId);
     if (!content) {
       console.log('No content found');
-      alert('No content to share');
+      setQrErrorMessage('No content to share');
+      setQrErrorOpen(true);
       return;
     }
     console.log('Content found, proceeding...');
@@ -723,6 +728,49 @@ const HomePage = () => {
       
       console.log('Step 4: Processing final content...');
       const finalContent = finalMarkdownContent.trim() || '[Empty Document]';
+      
+      // EARLY CHECK: Estimate final URL size BEFORE compression
+      // QR code maximum is ~2500 chars, we need to check if content will fit
+      // Compressed base64 is roughly 1.33x original size in worst case
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      // Estimate compression ratio - deflate is very good on text (70%+ reduction), but images in base64 compress poorly (~10-15% reduction)
+      // Use conservative estimate: 60% of original size after compression
+      const estimatedCompressedSize = Math.ceil(finalContent.length * 0.6);
+      const estimatedEncodedSize = Math.ceil(estimatedCompressedSize * 1.4); // base64url = +33%, but slightly smaller than base64
+      const estimatedUrlLength = origin.length + 6 + estimatedEncodedSize; // origin + /view# + encoded
+      
+      console.log('Estimated sizes:', {
+        original: finalContent.length,
+        compressed: estimatedCompressedSize,
+        encoded: estimatedEncodedSize,
+        totalUrl: estimatedUrlLength
+      });
+      
+      // Check if URL will be too long
+      if (estimatedUrlLength > 2800) {
+        const imageCount = blocks.filter((b: any) => b.type === 'image').length;
+        const hasImages = imageCount > 0;
+        
+        let errorMessage = `Document too large for QR code.\n\n`;
+        errorMessage += `Estimated size: ~${estimatedUrlLength} characters\n`;
+        errorMessage += `Recommended maximum: ~2500 characters\n\n`;
+        
+        if (hasImages) {
+          errorMessage += `⚠️ Your document contains ${imageCount} image${imageCount > 1 ? 's' : ''}.\n`;
+          errorMessage += `High-quality images exceed the limit.\n\n`;
+        }
+        
+        errorMessage += `Solutions:\n`;
+        errorMessage += `• Use Export + AirDrop to share\n`;
+        errorMessage += `• Reduce text size\n`;
+        if (hasImages) {
+          errorMessage += `• Remove images\n`;
+        }
+        
+        setQrErrorMessage(errorMessage);
+        setQrErrorOpen(true);
+        return;
+      }
       
       console.log('Step 5: Compressing and encoding content...');
       
@@ -797,7 +845,6 @@ const HomePage = () => {
       }
       
       console.log('Step 6: Creating URL...');
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const viewUrl = `${origin}/view#${encoded}`;
       
       console.log('Final URL length:', viewUrl.length, 'characters');
@@ -806,8 +853,15 @@ const HomePage = () => {
       
       // Check if URL is too long (QR codes can handle up to ~3000 chars, but smaller is better)
       if (viewUrl.length > 2000) {
-        console.warn('⚠️ URL is very long (' + viewUrl.length + ' chars). QR code may be difficult to scan.');
-        console.warn('Consider reducing content size or using Export + AirDrop for large documents.');
+        console.warn('⚠️ URL very long (' + viewUrl.length + ' characters). QR code may be difficult to scan.');
+        console.warn('Reduce content size or use Export + AirDrop for large documents.');
+      }
+      
+      // Final safety check - if our estimation was too generous and URL is still too long, fail
+      if (viewUrl.length > 3000) {
+        setQrErrorMessage(`URL way too long (${viewUrl.length} characters). QR code cannot be generated.\n\nUse Export + AirDrop to share this document.`);
+        setQrErrorOpen(true);
+        return;
       }
       
       try {
@@ -879,10 +933,11 @@ const HomePage = () => {
         // More helpful error message
         const errorMsg = qrError?.message || 'Unknown error';
         if (errorMsg.includes('too long') || errorMsg.includes('exceed') || viewUrl.length > 2500) {
-          alert(`URL is too long (${viewUrl.length} characters). Maximum recommended is ~2500 characters.\n\nPlease use Export + AirDrop instead, or reduce the document size.`);
+          setQrErrorMessage(`URL too long (${viewUrl.length} characters). Recommended maximum: ~2500 characters.\n\nUse Export + AirDrop to share, or reduce document size.`);
         } else {
-          alert(`Failed to generate QR code: ${errorMsg}\n\nPlease try again or use Export + AirDrop instead.`);
+          setQrErrorMessage(`Failed to generate QR code: ${errorMsg}\n\nPlease try again or use Export + AirDrop.`);
         }
+        setQrErrorOpen(true);
         return;
       }
       console.log('Step 9: Setting qrCodeOpen to true');
@@ -890,7 +945,8 @@ const HomePage = () => {
       console.log('Step 10: QR Code modal state set to true');
     } catch (outerError) {
       console.error('QR code error:', outerError);
-      alert('Error generating QR code. Please try Export instead.');
+      setQrErrorMessage('Error generating QR code. Please use Export instead.');
+      setQrErrorOpen(true);
     }
   };
 
@@ -1044,16 +1100,6 @@ const HomePage = () => {
                   </ol>
                 </div>
                 
-                {qrCodeData && (qrCodeData.contentLength > 1500 || (qrCodeData.url && qrCodeData.url.length > 1200)) && (
-                  <div className="bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-md mb-3">
-                    <p className="text-xs text-yellow-700 dark:text-yellow-400 text-center">
-                      ⚠️ Large content detected. QR code may be difficult to scan. Try:
-                      <br />• Ensure good lighting and hold steady
-                      <br />• Or use Export + AirDrop for large documents
-                    </p>
-                  </div>
-                )}
-                
                 <div className="text-xs text-muted-foreground text-center space-y-0.5">
                   <p>
                     <strong className="text-foreground">{qrCodeData.title}</strong>
@@ -1076,6 +1122,29 @@ const HomePage = () => {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* QR Code Error Modal */}
+      <AlertDialog.Root open={qrErrorOpen} onOpenChange={setQrErrorOpen}>
+        <AlertDialog.Portal>
+          <AlertDialog.Overlay className="fixed inset-0 bg-black/70 z-[300]" />
+          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[310] w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-6 shadow-lg rounded-lg gap-4">
+            <AlertDialog.Title className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <span>⚠️</span>
+              Cannot Generate QR Code
+            </AlertDialog.Title>
+            <AlertDialog.Description className="text-sm text-muted-foreground mb-4 whitespace-pre-line">
+              {qrErrorMessage}
+            </AlertDialog.Description>
+            <div className="flex justify-end gap-2">
+              <AlertDialog.Cancel asChild>
+                <button className="px-4 py-2.5 rounded-md border hover:bg-muted text-sm transition-colors">
+                  OK
+                </button>
+              </AlertDialog.Cancel>
+            </div>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
     </div>
   );
 }
