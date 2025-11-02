@@ -43,6 +43,7 @@ const CanvasEditor = ({
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [blockMenuPosition, setBlockMenuPosition] = useState<{ x: number; y: number } | undefined>();
+  const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
 
   // Define node types
   const nodeTypes = useMemo<NodeTypes>(() => ({
@@ -63,13 +64,13 @@ const CanvasEditor = ({
             // Only allow connections between valid handle IDs
             const validSourceHandles = ['text-output', 'image-output', 'number-output', 'default-output'];
             const validTargetHandles = ['text-input', 'image-input', 'number-input', 'default-input'];
-            
+
             const hasValidSource = !edge.sourceHandle || validSourceHandles.includes(edge.sourceHandle);
             const hasValidTarget = !edge.targetHandle || validTargetHandles.includes(edge.targetHandle);
-            
+
             return hasValidSource && hasValidTarget;
           });
-          
+
           return { initialNodes: parsed.nodes, initialEdges: validEdges };
         }
       } catch (error) {
@@ -187,7 +188,7 @@ const CanvasEditor = ({
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           e.preventDefault();
-          
+
           const file = items[i].getAsFile();
           if (!file) continue;
 
@@ -351,9 +352,9 @@ const CanvasEditor = ({
     }, [setNodes, screenToFlowPosition]);
 
     return (
-      <div 
+      <div
         className="relative h-full overflow-hidden"
-        style={{ 
+        style={{
           width: 'calc(100% - 320px)', // Make space for sidebar
         }}
       >
@@ -364,33 +365,23 @@ const CanvasEditor = ({
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           nodeTypes={nodeTypes}
-          className={isDark ? "bg-background" : ""}
-          style={isDark ? undefined : { backgroundColor: "#f5f5f5" }}
           nodesDraggable={editable}
           nodesConnectable={editable}
           elementsSelectable={editable}
           connectionMode={ConnectionMode.Loose}
           isValidConnection={isValidConnection}
-          deleteKeyCode="Delete"
           minZoom={0.1}
           maxZoom={10}
-          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-          preventScrolling={false}
-          panOnScroll={true}
           zoomOnScroll={true}
-          zoomOnPinch={true}
-          zoomOnDoubleClick={false}
-          panOnDrag={[1, 2]}
+          panOnDrag={true}
+          autoPanOnNodeDrag={true}
           fitView={false}
-          autoPanOnConnect={false}
-          autoPanOnNodeDrag={false}
-          proOptions={{ hideAttribution: true }}
+          defaultViewport={viewportRef.current} // initial viewport
+          onMove={(event, newViewport) => {
+            viewportRef.current = newViewport; // met à jour le ref sans bloquer le drag
+          }}
         >
-          <Background
-            gap={12}
-            color={isDark ? "#444" : "#d4d4d4"}
-            size={1}
-          />
+          <Background gap={12} color={isDark ? "#444" : "#d4d4d4"} size={1} />
         </ReactFlow>
 
         {/* Add Node Button - Bottom Center */}
