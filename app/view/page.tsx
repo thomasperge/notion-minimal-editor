@@ -19,24 +19,46 @@ export default function ViewPage() {
         try {
           let decoded: string;
           
+          // Base64URL decoding function (URL-safe base64)
+          const base64UrlDecode = (str: string): Uint8Array => {
+            // Convert base64url back to base64
+            let base64 = str
+              .replace(/-/g, '+')
+              .replace(/_/g, '/');
+            
+            // Add padding if needed
+            while (base64.length % 4) {
+              base64 += '=';
+            }
+            
+            // Decode base64
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+          };
+          
           // Check if content is compressed (starts with 'c:')
           if (hash.startsWith('c:')) {
-            // Compressed content - decompress using Decompression Stream API
-            const base64Data = hash.substring(2); // Remove 'c:' prefix
+            // Compressed content - decode base64url then decompress
+            const base64UrlData = hash.substring(2); // Remove 'c:' prefix
             
             if (typeof DecompressionStream !== 'undefined') {
               try {
-                const binaryString = atob(base64Data);
-                const compressedData = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                  compressedData[i] = binaryString.charCodeAt(i);
-                }
+                // Decode base64url
+                const compressedData = base64UrlDecode(base64UrlData);
                 
+                // Decompress
                 const stream = new DecompressionStream('deflate');
                 const writer = stream.writable.getWriter();
                 const reader = stream.readable.getReader();
                 
-                writer.write(compressedData);
+                // Create a new Uint8Array to ensure proper typing
+                const dataToWrite = new Uint8Array(compressedData.length);
+                dataToWrite.set(compressedData);
+                writer.write(dataToWrite);
                 writer.close();
                 
                 const chunks: Uint8Array[] = [];
@@ -70,8 +92,14 @@ export default function ViewPage() {
               return;
             }
           } else {
-            // Not compressed - simple base64 decode
-            decoded = decodeURIComponent(escape(atob(hash)));
+            // Try base64url decode first (new format), fallback to base64 (old format)
+            try {
+              const decodedBytes = base64UrlDecode(hash);
+              decoded = new TextDecoder().decode(decodedBytes);
+            } catch {
+              // Fallback to base64 for backward compatibility
+              decoded = decodeURIComponent(escape(atob(hash)));
+            }
           }
           
           setContent(decoded);

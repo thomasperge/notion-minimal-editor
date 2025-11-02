@@ -9,6 +9,7 @@ import { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { useDocumentsContext } from "@/components/providers/documents-provider";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
+import * as QRCode from "qrcode";
 
 const HomePage = () => {
   const Editor = useMemo(() => dynamic(() => import("@/components/editor"), { ssr: false }) ,[]);
@@ -27,7 +28,7 @@ const HomePage = () => {
   const [editorKey, setEditorKey] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
-  const [qrCodeData, setQrCodeData] = useState<{ url: string; title: string; contentLength: number; usingExternalService?: boolean } | null>(null);
+  const [qrCodeData, setQrCodeData] = useState<{ url: string; title: string; contentLength: number } | null>(null);
 
   const {
     currentDocumentId,
@@ -723,116 +724,166 @@ const HomePage = () => {
       console.log('Step 4: Processing final content...');
       const finalContent = finalMarkdownContent.trim() || '[Empty Document]';
       
-      console.log('Step 5: Uploading to paste service for short URL...');
+      console.log('Step 5: Compressing and encoding content...');
       
-      // Use dpaste.com API to create a paste and get a short URL
-      // This gives us a very short URL (like dpaste.com/abc123) that works in QR codes
-      let viewUrl: string;
-      let usingExternalService = false;
+      // Base64URL encoding (URL-safe version of base64, more compact than regular base64 in URLs)
+      // Replaces + with -, / with _, and removes = padding
+      const base64UrlEncode = (data: Uint8Array): string => {
+        let binaryString = '';
+        for (let i = 0; i < data.length; i++) {
+          binaryString += String.fromCharCode(data[i]);
+        }
+        const base64 = btoa(binaryString);
+        // Convert to base64url (URL-safe)
+        return base64
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=/g, ''); // Remove padding
+      };
+      
+      let encoded: string;
+      let compressedSize = 0;
+      let originalSize = finalContent.length;
       
       try {
-        // Try dpaste.com API first
-        const dpasteResponse = await fetch('https://dpaste.com/api/v2/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            content: finalContent,
-            // Use 'text' syntax (markdown is not supported, but text will work)
-            syntax: 'text',
-            expiry_days: '7' // Paste expires in 7 days
-          })
-        });
-        
-        if (dpasteResponse.ok) {
-          const pasteUrl = await dpasteResponse.text();
-          // dpaste returns the full URL, we use it directly
-          viewUrl = pasteUrl.trim();
-          usingExternalService = true;
-          console.log('Paste created on dpaste.com:', viewUrl);
-        } else {
-          const errorText = await dpasteResponse.text();
-          throw new Error(`dpaste.com failed: ${dpasteResponse.status} - ${errorText}`);
-        }
-      } catch (dpasteError) {
-        console.warn('dpaste.com failed, using local URL with compression...', dpasteError);
-        
-        // Fallback: use compression with local URL
-        // This may still be too long for very large content, but it's our best option
-        let encoded: string;
-        
-        try {
-          if (typeof CompressionStream !== 'undefined') {
-            const stream = new CompressionStream('deflate');
-            const writer = stream.writable.getWriter();
-            const reader = stream.readable.getReader();
-            
-            writer.write(new TextEncoder().encode(finalContent));
-            writer.close();
-            
-            const chunks: Uint8Array[] = [];
-            let done = false;
-            
-            while (!done) {
-              const { value, done: readerDone } = await reader.read();
-              done = readerDone;
-              if (value) {
-                chunks.push(value);
-              }
+        if (typeof CompressionStream !== 'undefined') {
+          // Compress first
+          const stream = new CompressionStream('deflate');
+          const writer = stream.writable.getWriter();
+          const reader = stream.readable.getReader();
+          
+          writer.write(new TextEncoder().encode(finalContent));
+          writer.close();
+          
+          const chunks: Uint8Array[] = [];
+          let done = false;
+          
+          while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            if (value) {
+              chunks.push(value);
             }
-            
-            const compressedData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
-            let offset = 0;
-            for (const chunk of chunks) {
-              compressedData.set(chunk, offset);
-              offset += chunk.length;
-            }
-            
-            let binaryString = '';
-            for (let i = 0; i < compressedData.length; i++) {
-              binaryString += String.fromCharCode(compressedData[i]);
-            }
-            encoded = 'c:' + btoa(binaryString);
-            
-            console.log('Content compressed:', {
-              original: finalContent.length,
-              compressed: compressedData.length,
-              ratio: ((1 - compressedData.length / finalContent.length) * 100).toFixed(1) + '%'
-            });
-          } else {
-            encoded = btoa(unescape(encodeURIComponent(finalContent)));
-            console.log('Compression not available, using base64 only');
           }
-        } catch (compressionError) {
-          console.warn('Compression failed, using simple base64:', compressionError);
-          encoded = btoa(unescape(encodeURIComponent(finalContent)));
+          
+          const compressedData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+          let offset = 0;
+          for (const chunk of chunks) {
+            compressedData.set(chunk, offset);
+            offset += chunk.length;
+          }
+          
+          compressedSize = compressedData.length;
+          
+          // Encode with base64url (URL-safe and slightly more compact in URLs)
+          encoded = 'c:' + base64UrlEncode(compressedData);
+          
+          console.log('Content compressed and encoded:', {
+            original: originalSize,
+            compressed: compressedSize,
+            encodedLength: encoded.length,
+            compressionRatio: ((1 - compressedSize / originalSize) * 100).toFixed(1) + '%'
+          });
+        } else {
+          // No compression, just base64url encode
+          const textBytes = new TextEncoder().encode(finalContent);
+          encoded = base64UrlEncode(textBytes);
+          console.log('Compression not available, using base64url only');
         }
-        
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        viewUrl = `${origin}/view#${encoded}`;
-        console.warn('Using local URL (may be too long for QR code if content is very large):', viewUrl.length, 'chars');
+      } catch (error) {
+        console.warn('Compression/encoding failed, using base64 fallback:', error);
+        // Fallback to base64 if everything fails
+        encoded = btoa(unescape(encodeURIComponent(finalContent)));
       }
       
-      console.log('Step 6: Generating QR code URL...');
-      // Short URL from paste service = simple, scannable QR code
-      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=H&data=${encodeURIComponent(viewUrl)}`;
+      console.log('Step 6: Creating URL...');
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const viewUrl = `${origin}/view#${encoded}`;
       
-      console.log('QR Code generated:', {
-        originalLength: markdownContent.length,
-        urlLength: viewUrl.length,
-        urlPreview: viewUrl.substring(0, 50) + '...',
-        usingExternalService: usingExternalService
-      });
+      console.log('Final URL length:', viewUrl.length, 'characters');
+      
+      console.log('Step 7: Generating QR code...');
+      
+      // Check if URL is too long (QR codes can handle up to ~3000 chars, but smaller is better)
+      if (viewUrl.length > 2000) {
+        console.warn('⚠️ URL is very long (' + viewUrl.length + ' chars). QR code may be difficult to scan.');
+        console.warn('Consider reducing content size or using Export + AirDrop for large documents.');
+      }
+      
+      try {
+        console.log('Attempting to generate QR code for URL length:', viewUrl.length);
+        
+        // Generate QR code using qrcode library (client-side, no external API needed)
+        // For very long URLs, we need to adjust options
+        const qrOptions: any = {
+          margin: 1, // Smaller margin for more space
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        };
+        
+        // For very long URLs, we need to balance error correction vs capacity
+        // QR codes can store more data with lower error correction
+        if (viewUrl.length > 1500) {
+          // For very long URLs, use lower error correction to fit more data
+          qrOptions.errorCorrectionLevel = 'L'; // Lowest error correction (can store ~3000 chars)
+          qrOptions.width = 1000; // Very large size for dense QR codes
+          console.log('Using low error correction and very large size for very long URL');
+        } else if (viewUrl.length > 1000) {
+          qrOptions.errorCorrectionLevel = 'M'; // Medium error correction
+          qrOptions.width = 800; // Larger size for better scanning
+          console.log('Using medium error correction and larger size for long URL');
+        } else {
+          qrOptions.errorCorrectionLevel = 'H'; // High error correction for shorter URLs
+          qrOptions.width = 600;
+        }
+        
+        // Use Promise version explicitly
+        const qrCodeDataUrl = await new Promise<string>((resolve, reject) => {
+          QRCode.toDataURL(viewUrl, qrOptions, (err, url) => {
+            if (err) {
+              reject(err);
+            } else if (url) {
+              resolve(url);
+            } else {
+              reject(new Error('QR code generation returned no data'));
+            }
+          });
+        });
+        
+        console.log('QR Code generated successfully:', {
+          originalLength: markdownContent.length,
+          compressedSize: compressedSize || 'N/A',
+          urlLength: viewUrl.length,
+          qrCodeSize: qrCodeDataUrl.length + ' bytes (base64)',
+          urlPreview: viewUrl.substring(0, 60) + '...'
+        });
 
-      // Set QR code data and open modal
-      console.log('Step 8: Opening QR Code modal');
-      setQrCodeData({
-        url: qrCodeUrl,
-        title: documentTitle,
-        contentLength: markdownContent.length,
-        usingExternalService: usingExternalService
-      });
+        // Set QR code data and open modal
+        console.log('Step 8: Opening QR Code modal');
+        setQrCodeData({
+          url: qrCodeDataUrl, // Data URL (base64 image)
+          title: documentTitle,
+          contentLength: markdownContent.length
+        });
+      } catch (qrError: any) {
+        console.error('Failed to generate QR code:', qrError);
+        console.error('Error details:', {
+          message: qrError?.message,
+          stack: qrError?.stack,
+          urlLength: viewUrl.length
+        });
+        
+        // More helpful error message
+        const errorMsg = qrError?.message || 'Unknown error';
+        if (errorMsg.includes('too long') || errorMsg.includes('exceed') || viewUrl.length > 2500) {
+          alert(`URL is too long (${viewUrl.length} characters). Maximum recommended is ~2500 characters.\n\nPlease use Export + AirDrop instead, or reduce the document size.`);
+        } else {
+          alert(`Failed to generate QR code: ${errorMsg}\n\nPlease try again or use Export + AirDrop instead.`);
+        }
+        return;
+      }
       console.log('Step 9: Setting qrCodeOpen to true');
       setQrCodeOpen(true);
       console.log('Step 10: QR Code modal state set to true');
@@ -955,14 +1006,24 @@ const HomePage = () => {
             {qrCodeData && (
               <>
                 <div className="flex justify-center mb-3">
-                  <Image 
-                    src={qrCodeData.url} 
-                    alt="QR Code" 
-                    width={400}
-                    height={400}
-                    className="w-full max-w-[400px] h-auto border-2 border-border rounded-lg bg-white p-2"
-                    unoptimized
-                  />
+                  {qrCodeData.url ? (
+                    <Image 
+                      src={qrCodeData.url} 
+                      alt="QR Code" 
+                      width={400}
+                      height={400}
+                      className="w-full max-w-[400px] h-auto border-2 border-border rounded-lg bg-white p-2"
+                      unoptimized
+                      onError={(e) => {
+                        console.error('QR Code image failed to load:', qrCodeData.url.substring(0, 100));
+                        console.error('Full QR URL length:', qrCodeData.url.length);
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full max-w-[400px] h-[400px] border-2 border-border rounded-lg bg-white p-2 flex items-center justify-center">
+                      <p className="text-sm text-muted-foreground">Generating QR code...</p>
+                    </div>
+                  )}
                 </div>
                 
                 <p className="text-xs text-muted-foreground mb-3 text-center">
@@ -979,10 +1040,12 @@ const HomePage = () => {
                   </ol>
                 </div>
                 
-                {qrCodeData && qrCodeData.contentLength > 3000 && (
+                {qrCodeData && (qrCodeData.contentLength > 1500 || (qrCodeData.url && qrCodeData.url.length > 1200)) && (
                   <div className="bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-md mb-3">
                     <p className="text-xs text-yellow-700 dark:text-yellow-400 text-center">
-                      ⚠️ Content is large. If QR code doesn&apos;t scan, use Export + AirDrop instead.
+                      ⚠️ Large content detected. QR code may be difficult to scan. Try:
+                      <br />• Ensure good lighting and hold steady
+                      <br />• Or use Export + AirDrop for large documents
                     </p>
                   </div>
                 )}
