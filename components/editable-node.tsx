@@ -3,23 +3,24 @@
 import { useState, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, useReactFlow } from "@xyflow/react";
 
-interface EditableNodeData {
+interface EditableNodeData extends Record<string, unknown> {
   label: string;
 }
 
-export const EditableNode = ({ id, data, selected }: NodeProps<EditableNodeData>) => {
+export const EditableNode = ({ id, data, selected }: any) => {
   const { setNodes } = useReactFlow();
+  const nodeData = data as EditableNodeData;
   const [isEditing, setIsEditing] = useState(false);
-  const [localLabel, setLocalLabel] = useState(data.label);
+  const [localLabel, setLocalLabel] = useState(nodeData.label);
   const inputRef = useRef<HTMLInputElement>(null);
   const spanRef = useRef<HTMLSpanElement>(null);
 
   // Sync local label when data changes externally
   useEffect(() => {
     if (!isEditing) {
-      setLocalLabel(data.label);
+      setLocalLabel(nodeData.label);
     }
-  }, [data.label, isEditing]);
+  }, [nodeData.label, isEditing]);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -39,7 +40,7 @@ export const EditableNode = ({ id, data, selected }: NodeProps<EditableNodeData>
 
   const handleDoubleClick = () => {
     setIsEditing(true);
-    setLocalLabel(data.label);
+    setLocalLabel(nodeData.label);
   };
 
   const handleBlur = () => {
@@ -61,7 +62,7 @@ export const EditableNode = ({ id, data, selected }: NodeProps<EditableNodeData>
       if (evt.key === "Enter") {
         handleBlur();
       } else {
-        setLocalLabel(data.label);
+        setLocalLabel(nodeData.label);
         setIsEditing(false);
       }
     }
@@ -106,7 +107,7 @@ export const EditableNode = ({ id, data, selected }: NodeProps<EditableNodeData>
         />
       ) : (
         <div onDoubleClick={handleDoubleClick} className="text-sm font-medium cursor-text whitespace-nowrap">
-          {data.label}
+          {nodeData.label}
         </div>
       )}
       
