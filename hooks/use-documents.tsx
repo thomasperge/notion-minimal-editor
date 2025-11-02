@@ -50,10 +50,112 @@ export const useDocuments = () => {
               updatedAt: new Date().toISOString(),
             };
             
+            // Default welcome content
+            const welcomeContent = [
+              {
+                type: "heading" as const,
+                props: { level: 1 as const },
+                content: [
+                  { type: "text" as const, text: "Welcome to ", styles: {} },
+                  { type: "text" as const, text: "Notion Minimal", styles: { textColor: "yellow" } }
+                ]
+              },
+              {
+                type: "paragraph" as const,
+                content: "This is a minimal Notion-like editor powered by BlockNote. Start writing by clicking here or using the slash command."
+              },
+              {
+                type: "heading" as const,
+                props: { level: 2 as const },
+                content: "✨ Features"
+              },
+              {
+                type: "bulletListItem" as const,
+                content: [
+                  { type: "text" as const, text: "Rich text editing with ", styles: {} },
+                  { type: "text" as const, text: "formatting", styles: { bold: true, textColor: "purple" } }
+                ]
+              },
+              {
+                type: "bulletListItem" as const,
+                content: [
+                  { type: "text" as const, text: "🌓 Dark and ", styles: {} },
+                  { type: "text" as const, text: "☀️ light", styles: {} },
+                  { type: "text" as const, text: " mode support", styles: {} }
+                ]
+              },
+              {
+                type: "bulletListItem" as const,
+                content: "🖼️ Image support - paste or drag & drop"
+              },
+              {
+                type: "bulletListItem" as const,
+                content: "📚 Multiple documents in sidebar"
+              },
+              {
+                type: "bulletListItem" as const,
+                content: [
+                  { type: "text" as const, text: "Export to ", styles: {} },
+                  { type: "text" as const, text: "JSON", styles: { textColor: "orange" } },
+                  { type: "text" as const, text: ", ", styles: {} },
+                  { type: "text" as const, text: "Markdown", styles: { textColor: "orange" } },
+                  { type: "text" as const, text: ", or ", styles: {} },
+                  { type: "text" as const, text: "HTML", styles: { textColor: "orange" } }
+                ]
+              },
+              {
+                type: "bulletListItem" as const,
+                content: [
+                  { type: "text" as const, text: "📱 QR code sharing for ", styles: {} },
+                  { type: "text" as const, text: "iPhone", styles: { bold: true, textColor: "blue" } }
+                ]
+              },
+              {
+                type: "heading" as const,
+                props: { level: 2 as const },
+                content: "🚀 Getting Started"
+              },
+              {
+                type: "numberedListItem" as const,
+                content: "Create a new page using the \"New page\" button in the sidebar"
+              },
+              {
+                type: "numberedListItem" as const,
+                content: [
+                  { type: "text" as const, text: "Type ", styles: {} },
+                  { type: "text" as const, text: "\"/\"", styles: { bold: true, backgroundColor: "gray", textColor: "default" } },
+                  { type: "text" as const, text: " to see all available commands", styles: {} }
+                ]
+              },
+              {
+                type: "numberedListItem" as const,
+                content: "Click the user avatar icon to access settings"
+              },
+              {
+                type: "numberedListItem" as const,
+                content: [
+                  { type: "text" as const, text: "Use the ", styles: {} },
+                  { type: "text" as const, text: "share icon", styles: { bold: true, textColor: "green" } },
+                  { type: "text" as const, text: " in the header to generate a QR code", styles: {} }
+                ]
+              },
+              {
+                type: "paragraph" as const,
+                content: ""
+              },
+              {
+                type: "paragraph" as const,
+                content: [
+                  { type: "text" as const, text: "by ", styles: {} },
+                  { type: "text" as const, text: "thomaskauffmant.com", styles: { italic: true, textColor: "gray" } }
+                ]
+              }
+            ];
+            
             const initialDocs = [defaultDoc];
             localStorage.setItem(DOCUMENTS_LIST_KEY, JSON.stringify(initialDocs));
             localStorage.setItem(CURRENT_DOCUMENT_KEY, defaultDoc.id);
-            localStorage.setItem(`${DOCUMENT_PREFIX}${defaultDoc.id}`, JSON.stringify([]));
+            localStorage.setItem(`${DOCUMENT_PREFIX}${defaultDoc.id}`, JSON.stringify(welcomeContent));
             
             setDocuments(initialDocs);
             setCurrentDocumentId(defaultDoc.id);
@@ -116,7 +218,7 @@ export const useDocuments = () => {
     localStorage.setItem(`${DOCUMENT_PREFIX}${newDoc.id}`, JSON.stringify([]));
 
     return newDoc;
-  }, [documents, saveDocumentsList]);
+  }, [documents, saveDocumentsList, setCurrentDocumentId]);
 
   // Update document title
   const updateDocumentTitle = useCallback((id: string, newTitle: string) => {
@@ -128,7 +230,10 @@ export const useDocuments = () => {
 
   // Delete a document
   const deleteDocument = useCallback((id: string) => {
+    console.log('🗑️ Deleting document:', id);
+    console.log('Current documents:', documents.length);
     const updatedDocs = documents.filter((doc) => doc.id !== id);
+    console.log('Updated documents:', updatedDocs.length);
     saveDocumentsList(updatedDocs);
 
     // Remove document content
@@ -138,14 +243,17 @@ export const useDocuments = () => {
     if (currentDocumentId === id) {
       if (updatedDocs.length > 0) {
         const newCurrentId = updatedDocs[0].id;
+        console.log('Switching to document:', newCurrentId);
         setCurrentDocumentId(newCurrentId);
         localStorage.setItem(CURRENT_DOCUMENT_KEY, newCurrentId);
       } else {
+        console.log('No documents left');
         setCurrentDocumentId(null);
         localStorage.removeItem(CURRENT_DOCUMENT_KEY);
       }
     }
-  }, [documents, currentDocumentId, saveDocumentsList]);
+    console.log('✅ Delete complete');
+  }, [documents, currentDocumentId, saveDocumentsList, setCurrentDocumentId]);
 
   // Duplicate a document
   const duplicateDocument = useCallback((id: string) => {
@@ -170,7 +278,7 @@ export const useDocuments = () => {
     localStorage.setItem(CURRENT_DOCUMENT_KEY, newDoc.id);
 
     return newDoc;
-  }, [documents, saveDocumentsList]);
+  }, [documents, saveDocumentsList, setCurrentDocumentId]);
 
   // Get document content
   const getDocumentContent = useCallback((id: string): string | null => {
@@ -230,7 +338,7 @@ export const useDocuments = () => {
   const switchToDocument = useCallback((id: string) => {
     setCurrentDocumentId(id);
     localStorage.setItem(CURRENT_DOCUMENT_KEY, id);
-  }, []);
+  }, [setCurrentDocumentId]);
 
   return {
     documents,

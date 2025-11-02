@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { FileText, MoreVertical, Trash2, Copy, Edit2 } from "lucide-react";
-import * as AlertDialog from "@radix-ui/react-alert-dialog";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Document } from "@/hooks/use-documents";
 
 interface DocumentItemProps {
@@ -25,8 +25,14 @@ export const DocumentItem = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(document.title);
   const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Update edited title when document changes
+  useEffect(() => {
+    setEditedTitle(document.title);
+  }, [document.title]);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -71,8 +77,10 @@ export const DocumentItem = ({
   };
 
   const handleConfirmDelete = () => {
-    onDelete(document.id);
+    console.log('🔥 handleConfirmDelete called for:', document.id);
     setShowMenu(false);
+    onDelete(document.id);
+    setShowDeleteDialog(false);
   };
 
   const handleDuplicate = () => {
@@ -141,41 +149,43 @@ export const DocumentItem = ({
             <Copy className="h-4 w-4" />
             Duplicate
           </button>
-          <AlertDialog.Root>
-            <AlertDialog.Trigger asChild>
-              <button
-                onClick={() => setShowMenu(false)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive dark:text-red-400 hover:bg-destructive/10 dark:hover:bg-red-500/10 transition-colors"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </button>
-            </AlertDialog.Trigger>
-            <AlertDialog.Portal>
-              <AlertDialog.Overlay className="fixed inset-0 bg-black/70 z-[100]" />
-              <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[110] w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-6 shadow-lg rounded-lg gap-4">
-                <AlertDialog.Title className="text-base font-semibold mb-2">Delete document?</AlertDialog.Title>
-                <AlertDialog.Description className="text-sm text-muted-foreground mb-4">
-                  Are you sure you want to delete &quot;{document.title}&quot;? This action cannot be undone.
-                </AlertDialog.Description>
-                <div className="flex justify-end gap-2">
-                  <AlertDialog.Cancel asChild>
-                    <button className="px-4 py-2.5 rounded-md border hover:bg-muted text-sm">Cancel</button>
-                  </AlertDialog.Cancel>
-                  <AlertDialog.Action asChild>
-                    <button
-                      onClick={handleConfirmDelete}
-                      className="px-4 py-2.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm"
-                    >
-                      Delete
-                    </button>
-                  </AlertDialog.Action>
-                </div>
-              </AlertDialog.Content>
-            </AlertDialog.Portal>
-          </AlertDialog.Root>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(false);
+              setShowDeleteDialog(true);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive dark:text-red-400 hover:bg-destructive/10 dark:hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
         </div>
       )}
+
+      {/* Delete Dialog */}
+      <Dialog.Root open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/70 z-[300]" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[310] w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-6 shadow-lg rounded-lg gap-4">
+            <Dialog.Title className="text-base font-semibold mb-2">Delete document?</Dialog.Title>
+            <Dialog.Description className="text-sm text-muted-foreground mb-4">
+              Are you sure you want to delete &quot;{document.title}&quot;? This action cannot be undone.
+            </Dialog.Description>
+            <div className="flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <button className="px-4 py-2.5 rounded-md border hover:bg-muted text-sm">Cancel</button>
+              </Dialog.Close>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-4 py-2.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm"
+              >
+                Delete
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 };
