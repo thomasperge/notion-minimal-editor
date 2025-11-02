@@ -191,10 +191,10 @@ const HomePage = () => {
 
   // Save sidebar state to localStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && isLoaded) {
       localStorage.setItem('sidebar-open', String(sidebarOpen));
     }
-  }, [sidebarOpen]);
+  }, [sidebarOpen, isLoaded]);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);

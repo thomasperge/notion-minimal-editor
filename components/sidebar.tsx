@@ -3,6 +3,7 @@
 import { Plus, PanelLeftClose, HelpCircle, Github } from "lucide-react";
 import { useDocumentsContext } from "@/components/providers/documents-provider";
 import { DocumentItem } from "./document-item";
+import { useState, useRef } from "react";
 
 interface SidebarProps {
   onToggle?: () => void;
@@ -20,8 +21,25 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
     switchToDocument,
   } = useDocumentsContext();
 
+  const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleCreateDocument = () => {
     createDocument();
+  };
+
+  const handleMouseEnter = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setShowHelpTooltip(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutRef.current = setTimeout(() => {
+      setShowHelpTooltip(false);
+    }, 150); // Petit délai pour permettre le passage de la souris
   };
 
   if (!isLoaded) {
@@ -87,50 +105,56 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
 
       {/* Help Button */}
       <div className="p-4 flex-shrink-0 flex justify-end">
-        <div className="relative group">
+        <div 
+          className="relative"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           <button className="flex items-center justify-center w-8 h-8 rounded-full bg-muted hover:bg-muted/80 transition-colors">
             <HelpCircle className="h-5 w-5 text-muted-foreground" />
           </button>
           
           {/* Help Tooltip */}
-          <div className="absolute left-full ml-2 bottom-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
-            <div className="bg-background border rounded-lg shadow-lg p-4 min-w-[280px]">
-              <h4 className="text-sm font-semibold mb-2">Quick Help</h4>
-              <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">/</kbd>
-                  <span>Open slash menu</span>
+          {showHelpTooltip && (
+            <div className="absolute left-full ml-2 bottom-0 z-50">
+              <div className="bg-background border rounded-lg shadow-lg p-4 min-w-[280px]">
+                <h4 className="text-sm font-semibold mb-2">Quick Help</h4>
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">/</kbd>
+                    <span>Open slash menu</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+Z</kbd>
+                    <span>Undo</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+Shift+Z</kbd>
+                    <span>Redo</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+B</kbd>
+                    <span>Bold</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+I</kbd>
+                    <span>Italic</span>
+                  </div>
                 </div>
-                <div className="flex items-start gap-2">
-                  <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+Z</kbd>
-                  <span>Undo</span>
+                <div className="mt-4 pt-4 border-t">
+                  <a 
+                    href="https://github.com/thomasperge/notion-minimal-editor" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Github className="h-4 w-4" />
+                    <span>View on GitHub</span>
+                  </a>
                 </div>
-                <div className="flex items-start gap-2">
-                  <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+Shift+Z</kbd>
-                  <span>Redo</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+B</kbd>
-                  <span>Bold</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <kbd className="px-2 py-0.5 bg-muted rounded text-xs font-mono">Ctrl+I</kbd>
-                  <span>Italic</span>
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t">
-                <a 
-                  href="https://github.com/thomasperge/notion-minimal-editor" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Github className="h-4 w-4" />
-                  <span>View on GitHub</span>
-                </a>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </aside>

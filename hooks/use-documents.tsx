@@ -147,7 +147,7 @@ export const useDocuments = () => {
                 type: "paragraph" as const,
                 content: [
                   { type: "text" as const, text: "by ", styles: {} },
-                  { type: "text" as const, text: "thomaskauffmant.com", styles: { italic: true, textColor: "gray" } }
+                  { type: "link" as const, href: "https://thomaskauffmant.com", content: [{ type: "text" as const, text: "thomaskauffmant.com", styles: { italic: true, textColor: "purple" } }] }
                 ]
               }
             ];
