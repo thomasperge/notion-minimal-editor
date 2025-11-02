@@ -7,7 +7,7 @@ interface DocumentsContextType {
   documents: Document[];
   currentDocumentId: string | null;
   isLoaded: boolean;
-  createDocument: () => Document;
+  createDocument: (type?: 'document' | 'canvas') => Document;
   updateDocumentTitle: (id: string, newTitle: string) => void;
   deleteDocument: (id: string) => void;
   duplicateDocument: (id: string) => void;

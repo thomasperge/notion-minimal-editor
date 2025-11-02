@@ -5,6 +5,7 @@ A minimal Notion-like editor powered by BlockNote and Next.js. Focus on writing 
 ## ✨ Features
 
 - 📝 **Rich Text Editor** - Powered by BlockNote with full Notion-style editing
+- 🎨 **Canvas Editor** - Build interactive diagrams and flows with React Flow
 - 🌓 **Dark Mode** - Beautiful dark and light themes
 - 💾 **Local Storage** - Auto-save your content in the browser
 - 📥 **Import Options** - Import content from JSON, Markdown, or HTML files or paste from clipboard
@@ -13,6 +14,7 @@ A minimal Notion-like editor powered by BlockNote and Next.js. Focus on writing 
 - 🎨 **Customizable Width** - Adjust editor width (Narrow, Medium, Wide, Full)
 - 🖼️ **Image Support** - Paste and insert images directly
 - ⚙️ **Settings Dialog** - Customize your editor experience
+- 📱 **QR Code Sharing** - Share your content instantly
 
 ## 🚀 Getting Started
 
@@ -46,12 +48,19 @@ npm run dev
 - [Next.js 13](https://nextjs.org/) - React framework
 - [React 18](https://react.dev/) - UI library
 - [BlockNote](https://www.blocknotejs.org/) - Block-based editor
+- [React Flow](https://reactflow.dev/) - Canvas and diagram editor
 - [TypeScript](https://www.typescriptlang.org/) - Type safety
 - [Tailwind CSS](https://tailwindcss.com/) - Styling
 - [Radix UI](https://www.radix-ui.com/) - UI components
 - [next-themes](https://github.com/pacocoursey/next-themes) - Theme management
 
 ## 📖 Usage
+
+### Document Types
+
+Create two types of content:
+- **📝 Pages** - Rich text documents with BlockNote
+- **🎨 Canvas** - Interactive diagrams and flows with React Flow
 
 ### Writing
 
@@ -62,6 +71,14 @@ Start typing to create content. The editor supports:
 - Bold, italic, and underline
 - Links
 - Images (paste or drag & drop)
+
+### Canvas
+
+Create interactive diagrams by:
+- Clicking "+ Add Node" to add new nodes
+- Dragging nodes around
+- Connecting nodes by dragging from one handle to another
+- Deleting elements with Delete key
 
 ### Keyboard Shortcuts
 

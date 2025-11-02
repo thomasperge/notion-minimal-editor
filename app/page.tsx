@@ -14,6 +14,7 @@ import * as QRCode from "qrcode";
 
 const HomePage = () => {
   const Editor = useMemo(() => dynamic(() => import("@/components/editor"), { ssr: false }) ,[]);
+  const CanvasEditor = useMemo(() => dynamic(() => import("@/components/canvas-editor"), { ssr: false }) ,[]);
   const editorRef = useRef<BlockNoteEditor | null>(null);
   const previousDocumentIdRef = useRef<string | null>(null);
   const pendingSaveRef = useRef<string | null>(null);
@@ -38,6 +39,7 @@ const HomePage = () => {
     isLoaded: documentsLoaded,
     getDocumentContent,
     saveDocumentContent,
+    documents,
   } = useDocumentsContext();
 
   // Migrate old data to new system (one-time migration)
@@ -74,7 +76,8 @@ const HomePage = () => {
     try {
       // Validate content is valid JSON
       const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) {
+      // Accept both arrays (BlockNote) and objects with nodes/edges (React Flow)
+      if (Array.isArray(parsed) || (typeof parsed === 'object' && parsed.nodes && parsed.edges)) {
         // Save with explicit document ID to ensure correct storage
         const storageKey = `document-${documentId}`;
         localStorage.setItem(storageKey, content);
@@ -135,8 +138,12 @@ const HomePage = () => {
         try {
           // Validate content
           const parsed = JSON.parse(content);
-          if (Array.isArray(parsed)) {
-            console.log(`📂 Loading document ${currentDocumentId} (${parsed.length} blocks)`);
+          // Accept both arrays (BlockNote) and objects with nodes/edges (React Flow)
+          if (Array.isArray(parsed) || (typeof parsed === 'object' && parsed.nodes && parsed.edges)) {
+            const lengthInfo = Array.isArray(parsed) 
+              ? `${parsed.length} blocks`
+              : `${parsed.nodes?.length || 0} nodes, ${parsed.edges?.length || 0} edges`;
+            console.log(`📂 Loading document ${currentDocumentId} (${lengthInfo})`);
             setInitialContent(content);
           } else {
             console.warn(`⚠️ Invalid content format for document ${currentDocumentId}`);
@@ -1024,30 +1031,45 @@ const HomePage = () => {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
         />
-        <div className={`mx-auto pt-10 pb-24 px-4 min-h-[calc(100vh-3.5rem)] w-full ${
-          editorWidth === 'narrow' ? 'max-w-2xl' :
-          editorWidth === 'medium' ? 'max-w-4xl' :
-          editorWidth === 'wide' ? 'max-w-6xl' :
-          'max-w-full'
-        }`}>
-          {isLoaded && isContentLoaded && documentsLoaded && (
-            currentDocumentId ? (
-              <Editor 
+        {isLoaded && isContentLoaded && documentsLoaded && (() => {
+          const currentDoc = documents.find(doc => doc.id === currentDocumentId);
+          const isCanvas = currentDoc?.type === 'canvas';
+          
+          if (isCanvas) {
+            return (
+              <CanvasEditor
                 key={editorKey || currentDocumentId}
-                onEditorReady={handleEditorReady}
                 initialContent={initialContent}
                 onChange={handleContentChange}
               />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <p className="text-muted-foreground mb-4">No document selected</p>
-                  <p className="text-sm text-muted-foreground">Create a new page from the sidebar</p>
+            );
+          }
+          
+          return (
+            <div className={`mx-auto pt-10 pb-24 px-4 min-h-[calc(100vh-3.5rem)] w-full ${
+              editorWidth === 'narrow' ? 'max-w-2xl' :
+              editorWidth === 'medium' ? 'max-w-4xl' :
+              editorWidth === 'wide' ? 'max-w-6xl' :
+              'max-w-full'
+            }`}>
+              {currentDocumentId ? (
+                <Editor 
+                  key={editorKey || currentDocumentId}
+                  onEditorReady={handleEditorReady}
+                  initialContent={initialContent}
+                  onChange={handleContentChange}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <p className="text-muted-foreground mb-4">No document selected</p>
+                    <p className="text-sm text-muted-foreground">Create a new page from the sidebar</p>
+                  </div>
                 </div>
-              </div>
-            )
-          )}
-        </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* QR Code Modal */}

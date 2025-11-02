@@ -7,6 +7,7 @@ export interface Document {
   title: string;
   createdAt: string;
   updatedAt: string;
+  type: 'document' | 'canvas'; // Type de document
 }
 
 const DOCUMENTS_LIST_KEY = "documents-list";
@@ -48,6 +49,7 @@ export const useDocuments = () => {
               title: "Welcome",
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
+              type: 'document',
             };
             
             // Default welcome content
@@ -201,12 +203,13 @@ export const useDocuments = () => {
   }, []);
 
   // Create a new document
-  const createDocument = useCallback((): Document => {
+  const createDocument = useCallback((type: 'document' | 'canvas' = 'document'): Document => {
     const newDoc: Document = {
       id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: "Untitled",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      type,
     };
 
     const updatedDocs = [...documents, newDoc];
@@ -266,6 +269,7 @@ export const useDocuments = () => {
       title: `${docToDuplicate.title} (Copy)`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      type: docToDuplicate.type,
     };
 
     const updatedDocs = [...documents, newDoc];

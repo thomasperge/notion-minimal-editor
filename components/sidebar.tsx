@@ -1,9 +1,9 @@
 "use client";
 
-import { Plus, PanelLeftClose, HelpCircle, Github } from "lucide-react";
+import { Plus, PanelLeftClose, HelpCircle, Github, GitBranch, FileText } from "lucide-react";
 import { useDocumentsContext } from "@/components/providers/documents-provider";
 import { DocumentItem } from "./document-item";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 interface SidebarProps {
   onToggle?: () => void;
@@ -22,10 +22,18 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
   } = useDocumentsContext();
 
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const handleCreateDocument = () => {
-    createDocument();
+    createDocument('document');
+    setShowCreateMenu(false);
+  };
+
+  const handleCreateCanvas = () => {
+    createDocument('canvas');
+    setShowCreateMenu(false);
   };
 
   const handleMouseEnter = () => {
@@ -42,6 +50,22 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
     }, 150); // Petit délai pour permettre le passage de la souris
   };
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowCreateMenu(false);
+      }
+    };
+
+    if (showCreateMenu) {
+      window.document.addEventListener("mousedown", handleClickOutside);
+      return () => window.document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showCreateMenu]);
+
   if (!isLoaded) {
     return (
       <div className="w-64 border-r bg-background flex items-center justify-center">
@@ -55,13 +79,36 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
       {/* Header */}
       <div className="p-4 border-b flex-shrink-0">
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleCreateDocument}
-            className="flex-1 flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            New page
-          </button>
+          <div className="relative flex-1">
+            <button
+              onClick={() => setShowCreateMenu(!showCreateMenu)}
+              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New
+            </button>
+            {showCreateMenu && (
+              <div
+                ref={menuRef}
+                className="absolute top-full left-0 mt-1 w-full bg-background border rounded-md shadow-lg z-50"
+              >
+                <button
+                  onClick={handleCreateDocument}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <FileText className="h-4 w-4" />
+                  New page
+                </button>
+                <button
+                  onClick={handleCreateCanvas}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <GitBranch className="h-4 w-4" />
+                  New canvas
+                </button>
+              </div>
+            )}
+          </div>
           {onToggle && (
             <button
               onClick={onToggle}

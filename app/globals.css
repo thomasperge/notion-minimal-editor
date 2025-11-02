@@ -203,3 +203,149 @@ html[class*="dark"] .bn-editor * {
   background-color: #191919 !important;
   background: #191919 !important;
 }
+
+/* React Flow styling */
+.react-flow__node {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+
+.react-flow__node-default {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+
+.react-flow__node-textInput,
+.react-flow__node-imageInput,
+.react-flow__node-numberInput {
+  height: auto !important;
+  width: auto !important;
+  overflow: visible !important;
+}
+
+.dark .react-flow__node-textInput,
+.dark .react-flow__node-imageInput,
+.dark .react-flow__node-numberInput {
+  overflow: visible !important;
+}
+
+.react-flow__node-label {
+  color: hsl(var(--foreground)) !important;
+}
+
+.react-flow__edge {
+  stroke: hsl(var(--foreground)) !important;
+}
+
+.react-flow__handle {
+  background-color: hsl(var(--primary)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1000 !important;
+}
+
+.react-flow__controls {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+.react-flow__controls-button {
+  background-color: hsl(var(--background)) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: hsl(var(--muted)) !important;
+}
+
+.react-flow__panel {
+  background-color: transparent !important;
+  z-index: 10 !important;
+}
+
+.react-flow__panel.bottom.right {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.react-flow {
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+}
+
+/* Dark mode specific React Flow */
+.dark .react-flow__node {
+  background-color: #2a2a2a !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid #404040 !important;
+  overflow: visible !important;
+}
+
+.dark .react-flow__node-default {
+  background-color: #2a2a2a !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid #404040 !important;
+  overflow: visible !important;
+}
+
+.dark .react-flow__node-label {
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .react-flow__edge {
+  stroke: #888 !important;
+}
+
+.dark .react-flow__handle {
+  background-color: #555 !important;
+  border: 1px solid #777 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1000 !important;
+}
+
+.dark .react-flow__controls {
+  background-color: #1a1a1a !important;
+  border: 1px solid #404040 !important;
+}
+
+.dark .react-flow__controls-button {
+  background-color: #1a1a1a !important;
+  border-bottom: 1px solid #404040 !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .react-flow__controls-button:hover {
+  background-color: #2a2a2a !important;
+}
+
+.dark .react-flow__background {
+  background-color: #191919 !important;
+}
+
+/* MiniMap styling */
+.react-flow__minimap {
+  position: absolute !important;
+  bottom: 4rem !important;
+  right: 20px !important;
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  z-index: 100 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 200px !important;
+  height: 150px !important;
+}
