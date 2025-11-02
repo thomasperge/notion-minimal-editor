@@ -27,7 +27,7 @@ const HomePage = () => {
   const [editorKey, setEditorKey] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
-  const [qrCodeData, setQrCodeData] = useState<{ url: string; title: string; contentLength: number } | null>(null);
+  const [qrCodeData, setQrCodeData] = useState<{ url: string; title: string; contentLength: number; usingExternalService?: boolean } | null>(null);
 
   const {
     currentDocumentId,
@@ -723,84 +723,106 @@ const HomePage = () => {
       console.log('Step 4: Processing final content...');
       const finalContent = finalMarkdownContent.trim() || '[Empty Document]';
       
-      console.log('Step 5: Compressing content...');
+      console.log('Step 5: Uploading to paste service for short URL...');
       
-      // Compress content using Compression Stream API to reduce URL size
-      // This allows much longer content to fit in a scannable QR code
-      let encoded: string;
+      // Use dpaste.com API to create a paste and get a short URL
+      // This gives us a very short URL (like dpaste.com/abc123) that works in QR codes
+      let viewUrl: string;
+      let usingExternalService = false;
       
       try {
-        // Try to use Compression Stream API (available in modern browsers)
-        if (typeof CompressionStream !== 'undefined') {
-          const stream = new CompressionStream('deflate');
-          const writer = stream.writable.getWriter();
-          const reader = stream.readable.getReader();
-          
-          writer.write(new TextEncoder().encode(finalContent));
-          writer.close();
-          
-          const chunks: Uint8Array[] = [];
-          let done = false;
-          
-          while (!done) {
-            const { value, done: readerDone } = await reader.read();
-            done = readerDone;
-            if (value) {
-              chunks.push(value);
-            }
-          }
-          
-          const compressedData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
-          let offset = 0;
-          for (const chunk of chunks) {
-            compressedData.set(chunk, offset);
-            offset += chunk.length;
-          }
-          
-          // Encode compressed data to base64
-          let binaryString = '';
-          for (let i = 0; i < compressedData.length; i++) {
-            binaryString += String.fromCharCode(compressedData[i]);
-          }
-          encoded = btoa(binaryString);
-          
-          console.log('Content compressed:', {
-            original: finalContent.length,
-            compressed: compressedData.length,
-            ratio: ((1 - compressedData.length / finalContent.length) * 100).toFixed(1) + '%'
-          });
-          
-          // Add prefix to indicate compression
-          encoded = 'c:' + encoded;
+        // Try dpaste.com API first
+        const dpasteResponse = await fetch('https://dpaste.com/api/v2/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            content: finalContent,
+            // Use 'text' syntax (markdown is not supported, but text will work)
+            syntax: 'text',
+            expiry_days: '7' // Paste expires in 7 days
+          })
+        });
+        
+        if (dpasteResponse.ok) {
+          const pasteUrl = await dpasteResponse.text();
+          // dpaste returns the full URL, we use it directly
+          viewUrl = pasteUrl.trim();
+          usingExternalService = true;
+          console.log('Paste created on dpaste.com:', viewUrl);
         } else {
-          // Fallback: simple base64 encoding without compression
-          encoded = btoa(unescape(encodeURIComponent(finalContent)));
-          console.log('Compression not available, using base64 only');
+          const errorText = await dpasteResponse.text();
+          throw new Error(`dpaste.com failed: ${dpasteResponse.status} - ${errorText}`);
         }
-      } catch (compressionError) {
-        console.warn('Compression failed, falling back to base64:', compressionError);
-        // Fallback: simple base64 encoding
-        encoded = btoa(unescape(encodeURIComponent(finalContent)));
+      } catch (dpasteError) {
+        console.warn('dpaste.com failed, using local URL with compression...', dpasteError);
+        
+        // Fallback: use compression with local URL
+        // This may still be too long for very large content, but it's our best option
+        let encoded: string;
+        
+        try {
+          if (typeof CompressionStream !== 'undefined') {
+            const stream = new CompressionStream('deflate');
+            const writer = stream.writable.getWriter();
+            const reader = stream.readable.getReader();
+            
+            writer.write(new TextEncoder().encode(finalContent));
+            writer.close();
+            
+            const chunks: Uint8Array[] = [];
+            let done = false;
+            
+            while (!done) {
+              const { value, done: readerDone } = await reader.read();
+              done = readerDone;
+              if (value) {
+                chunks.push(value);
+              }
+            }
+            
+            const compressedData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+            let offset = 0;
+            for (const chunk of chunks) {
+              compressedData.set(chunk, offset);
+              offset += chunk.length;
+            }
+            
+            let binaryString = '';
+            for (let i = 0; i < compressedData.length; i++) {
+              binaryString += String.fromCharCode(compressedData[i]);
+            }
+            encoded = 'c:' + btoa(binaryString);
+            
+            console.log('Content compressed:', {
+              original: finalContent.length,
+              compressed: compressedData.length,
+              ratio: ((1 - compressedData.length / finalContent.length) * 100).toFixed(1) + '%'
+            });
+          } else {
+            encoded = btoa(unescape(encodeURIComponent(finalContent)));
+            console.log('Compression not available, using base64 only');
+          }
+        } catch (compressionError) {
+          console.warn('Compression failed, using simple base64:', compressionError);
+          encoded = btoa(unescape(encodeURIComponent(finalContent)));
+        }
+        
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        viewUrl = `${origin}/view#${encoded}`;
+        console.warn('Using local URL (may be too long for QR code if content is very large):', viewUrl.length, 'chars');
       }
       
-      console.log('Step 6: Creating URL...');
-      
-      // Get current origin (works for localhost and production)
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      
-      // Create URL with compressed content in hash
-      // Format: https://yoursite.com/view#c:compressedbase64content
-      const viewUrl = `${origin}/view#${encoded}`;
-      
-      console.log('Step 7: Generating QR code URL...');
-      // Compressed content means shorter URL = simpler QR code
+      console.log('Step 6: Generating QR code URL...');
+      // Short URL from paste service = simple, scannable QR code
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=H&data=${encodeURIComponent(viewUrl)}`;
       
       console.log('QR Code generated:', {
         originalLength: markdownContent.length,
-        encodedLength: encoded.length,
         urlLength: viewUrl.length,
-        compressionUsed: encoded.startsWith('c:')
+        urlPreview: viewUrl.substring(0, 50) + '...',
+        usingExternalService: usingExternalService
       });
 
       // Set QR code data and open modal
@@ -808,7 +830,8 @@ const HomePage = () => {
       setQrCodeData({
         url: qrCodeUrl,
         title: documentTitle,
-        contentLength: markdownContent.length
+        contentLength: markdownContent.length,
+        usingExternalService: usingExternalService
       });
       console.log('Step 9: Setting qrCodeOpen to true');
       setQrCodeOpen(true);
