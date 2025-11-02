@@ -6,6 +6,8 @@ import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { useDocumentsContext } from "@/components/providers/documents-provider";
+import * as Dialog from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 
 const HomePage = () => {
   const Editor = useMemo(() => dynamic(() => import("@/components/editor"), { ssr: false }) ,[]);
@@ -23,6 +25,8 @@ const HomePage = () => {
   const [isContentLoaded, setIsContentLoaded] = useState(false);
   const [editorKey, setEditorKey] = useState<string>("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [qrCodeOpen, setQrCodeOpen] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<{ url: string; title: string; contentLength: number } | null>(null);
 
   const {
     currentDocumentId,
@@ -291,8 +295,16 @@ const HomePage = () => {
     if (!content || !Array.isArray(content)) return '';
     return content.map((item: any) => {
       if (typeof item === 'string') return item;
+      // BlockNote structure: item.text or item.content
       if (item.text) return item.text;
-      if (item.content) return extractText(item.content);
+      if (item.type === 'text' && item.text) return item.text;
+      if (item.content && Array.isArray(item.content)) return extractText(item.content);
+      if (item.content && typeof item.content === 'string') return item.content;
+      // Try to extract any string value
+      if (typeof item === 'object') {
+        const values = Object.values(item).filter(v => typeof v === 'string');
+        if (values.length > 0) return values.join(' ');
+      }
       return '';
     }).join('');
   };
@@ -302,17 +314,30 @@ const HomePage = () => {
     
     let markdown = '';
     for (const block of blocks) {
-      const text = extractText(block.content || []);
+      // Try to extract text from content, or from children, or from block itself
+      let text = extractText(block.content || []);
+      
+      // If no text in content, try children
+      if (!text && block.children && Array.isArray(block.children) && block.children.length > 0) {
+        text = extractText(block.children);
+      }
+      
+      // If still no text, check if there's text directly in the block
+      if (!text && block.props?.text) {
+        text = block.props.text;
+      }
       
       if (block.type === 'paragraph') {
-        markdown += text + '\n\n';
+        if (text) {
+          markdown += text + '\n\n';
+        }
       } else if (block.type === 'heading') {
         const level = block.props?.level || 1;
-        markdown += '#'.repeat(level) + ' ' + text + '\n\n';
+        markdown += '#'.repeat(level) + ' ' + (text || 'Untitled') + '\n\n';
       } else if (block.type === 'bulletListItem') {
-        markdown += '- ' + text + '\n';
+        markdown += '- ' + (text || '') + '\n';
       } else if (block.type === 'numberedListItem') {
-        markdown += '1. ' + text + '\n';
+        markdown += '1. ' + (text || '') + '\n';
       } else if (block.type === 'image') {
         markdown += `![${block.props?.altText || 'image'}](${block.props?.url || ''})\n\n`;
       } else if (text) {
@@ -645,6 +670,104 @@ const HomePage = () => {
     }
   };
 
+  // Handle QR code generation
+  const handleShowQRCode = async () => {
+    console.log('handleShowQRCode called');
+    if (!editorRef.current || !currentDocumentId) {
+      console.log('No editor or document ID');
+      alert('No content to share');
+      return;
+    }
+
+    const content = getDocumentContent(currentDocumentId);
+    if (!content) {
+      console.log('No content found');
+      alert('No content to share');
+      return;
+    }
+    console.log('Content found, proceeding...');
+
+    try {
+      console.log('Step 1: Getting document title...');
+      // Get document title
+      const documentsList = localStorage.getItem('documents-list');
+      let documentTitle = 'Untitled Document';
+      if (documentsList) {
+        const docs = JSON.parse(documentsList);
+        const currentDoc = docs.find((doc: any) => doc.id === currentDocumentId);
+        if (currentDoc) {
+          documentTitle = currentDoc.title || 'Untitled Document';
+        }
+      }
+      console.log('Step 2: Converting to Markdown...');
+
+      // Convert to Markdown for sharing
+      const blocks = JSON.parse(content);
+      console.log('Blocks structure:', JSON.stringify(blocks, null, 2).substring(0, 500));
+      const markdownContent = convertToMarkdown(blocks);
+      console.log('Markdown content length:', markdownContent.length);
+      console.log('Step 3: Checking if content is empty...');
+      console.log('Blocks array length:', blocks.length);
+      console.log('All blocks:', blocks.map((b: any) => ({ type: b.type, hasContent: !!b.content, contentLength: b.content?.length || 0, hasChildren: !!b.children, childrenLength: b.children?.length || 0 })));
+      
+      // Check if content is empty - but allow empty documents to still generate QR code
+      // An empty QR code can still be useful to show the structure
+      let finalMarkdownContent = markdownContent;
+      if (!markdownContent || markdownContent.trim().length === 0) {
+        console.log('Content is empty - but proceeding anyway to allow empty document QR codes');
+        // Use a minimal placeholder for empty documents
+        finalMarkdownContent = '[Empty Document]';
+      }
+      
+      console.log('Step 4: Processing final content...');
+      // Encode content and create URL on our own site
+      // Use base64 encoding in URL hash for long content (hash doesn't go to server)
+      const finalContent = finalMarkdownContent.trim() || '[Empty Document]';
+      
+      console.log('Final content:', finalContent.substring(0, 100));
+      
+      console.log('Step 5: Encoding content...');
+
+      // Encode content to base64
+      const encoded = btoa(unescape(encodeURIComponent(finalContent)));
+      console.log('Step 6: Creating URL...');
+      
+      // Get current origin (works for localhost and production)
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      
+      // Create URL with hash (hash can be very long, doesn't hit server)
+      // Format: https://yoursite.com/view#base64encodedcontent
+      const viewUrl = `${origin}/view#${encoded}`;
+      
+      console.log('Step 7: Generating QR code URL...');
+      // For shorter URLs, we could use query param, but hash is better for long content
+      // QR code will point to our own site's /view page
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=H&data=${encodeURIComponent(viewUrl)}`;
+      
+      console.log('QR Code generated with local URL:', {
+        originalLength: markdownContent.length,
+        encodedLength: encoded.length,
+        urlLength: viewUrl.length
+      });
+
+      // Set QR code data and open modal
+      console.log('Step 8: Opening QR Code modal');
+      setQrCodeData({
+        url: qrCodeUrl,
+        title: documentTitle,
+        contentLength: markdownContent.length
+      });
+      console.log('Step 9: Setting qrCodeOpen to true');
+      setQrCodeOpen(true);
+      console.log('Step 10: QR Code modal state set to true');
+    } catch (outerError) {
+      console.error('QR code error:', outerError);
+      alert('Error generating QR code. Please try Export instead.');
+    }
+  };
+
+
+
   // Listen for storage changes to update editor width without reload
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -681,6 +804,7 @@ const HomePage = () => {
     };
   }, [editorWidth]);
 
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -704,7 +828,7 @@ const HomePage = () => {
     <div className="min-h-screen bg-background flex">
       {sidebarOpen && <Sidebar onToggle={toggleSidebar} />}
       <div className={`flex-1 flex flex-col min-w-0 ${sidebarOpen ? 'ml-64' : ''}`}>
-        <Header 
+        <Header
           onUndo={handleUndo}
           onRedo={handleRedo}
           canUndo={canUndo}
@@ -712,6 +836,7 @@ const HomePage = () => {
           onClearContent={handleClearContent}
           onExport={handleExport}
           onImport={handleImport}
+          onShowQRCode={handleShowQRCode}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
         />
@@ -740,6 +865,71 @@ const HomePage = () => {
           )}
         </div>
       </div>
+
+      {/* QR Code Modal */}
+      <Dialog.Root open={qrCodeOpen} onOpenChange={setQrCodeOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/70 z-[300]" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[310] w-full max-w-sm -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-4 shadow-lg rounded-lg">
+            <Dialog.Title className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <span>📱</span>
+              Scan with iPhone
+            </Dialog.Title>
+            
+            {qrCodeData && (
+              <>
+                <div className="flex justify-center mb-3">
+                  <img 
+                    src={qrCodeData.url} 
+                    alt="QR Code" 
+                    className="w-full max-w-[400px] h-auto border-2 border-border rounded-lg bg-white p-2"
+                  />
+                </div>
+                
+                <p className="text-xs text-muted-foreground mb-3 text-center">
+                  Scan with iPhone camera - Ensure good lighting and hold steady
+                </p>
+                
+                <div className="bg-muted p-3 rounded-md mb-3">
+                  <strong className="text-xs block mb-1.5">How to use:</strong>
+                  <ol className="text-xs text-muted-foreground space-y-0.5 ml-3 list-decimal">
+                    <li>Open Camera on iPhone</li>
+                    <li>Point at QR code (zoom in if needed)</li>
+                    <li>Safari will open with the content</li>
+                    <li>Tap "Copy Text" button</li>
+                  </ol>
+                </div>
+                
+                {qrCodeData && qrCodeData.contentLength > 3000 && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-md mb-3">
+                    <p className="text-xs text-yellow-700 dark:text-yellow-400 text-center">
+                      ⚠️ Content is large. If QR code doesn't scan, use Export + AirDrop instead.
+                    </p>
+                  </div>
+                )}
+                
+                <div className="text-xs text-muted-foreground text-center space-y-0.5">
+                  <p>
+                    <strong className="text-foreground">{qrCodeData.title}</strong>
+                  </p>
+                  <p>
+                    {qrCodeData.contentLength.toLocaleString()} chars
+                  </p>
+                </div>
+              </>
+            )}
+            
+            <Dialog.Close asChild>
+              <button
+                className="absolute right-3 top-3 rounded-sm opacity-70 hover:opacity-100 transition-opacity"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

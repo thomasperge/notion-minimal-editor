@@ -83,12 +83,14 @@ body,
 
 /* BlockNote editor background override */
 .bn-editor,
+.bn-editor > *,
 .bn-editor .ProseMirror,
 .bn-editor [class*="mantine"],
 .bn-editor [class*="ProseMirror"],
 [class*="mantine"] .ProseMirror,
 [class*="mantine-"] .ProseMirror {
   background-color: hsl(var(--background)) !important;
+  background: hsl(var(--background)) !important;
   color: hsl(var(--foreground)) !important;
 }
 
@@ -100,35 +102,70 @@ body,
   color: hsl(var(--foreground)) !important;
 }
 
-/* Dark mode editor specific background */
+/* Dark mode editor specific background - force even when modals open */
 .dark .bn-editor,
 .dark .bn-editor > *,
+.dark .bn-editor > div,
 .dark .bn-editor .ProseMirror,
 .dark .bn-editor [class*="mantine"],
 .dark .bn-editor [class*="ProseMirror"],
 .dark [class*="mantine"] .ProseMirror,
 .dark [class*="mantine-"] .ProseMirror,
-.dark [class*="mantine"][class*="ProseMirror"] {
+.dark [class*="mantine"][class*="ProseMirror"],
+.dark .ProseMirror,
+.dark .ProseMirror-focused,
+.dark [class*="ProseMirror"] {
   background-color: #191919 !important;
+  background: #191919 !important;
   color: hsl(var(--foreground)) !important;
 }
 
-/* Ensure editor elements stay below header */
+/* Force text color consistency for ProseMirror in all states (focused/unfocused) */
+.ProseMirror,
+.ProseMirror-focused,
+.ProseMirror:focus,
+.bn-editor .ProseMirror,
+.bn-editor .ProseMirror-focused,
+.bn-editor .ProseMirror:focus,
+[class*="ProseMirror"] {
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .ProseMirror,
+.dark .ProseMirror-focused,
+.dark .ProseMirror:focus,
+.dark .bn-editor .ProseMirror,
+.dark .bn-editor .ProseMirror-focused,
+.dark .bn-editor .ProseMirror:focus,
+.dark [class*="ProseMirror"] {
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Ensure editor text color doesn't change when modals open */
+.bn-editor *:not(button):not(a):not(input):not(textarea):not(select) {
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .bn-editor *:not(button):not(a):not(input):not(textarea):not(select) {
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Ensure editor elements stay below header and modals */
 .bn-editor,
 .bn-editor *,
 [class*="mantine"],
 [class*="ProseMirror"] {
   position: relative;
-  z-index: 1;
+  z-index: 1 !important;
 }
 
-/* Fix BlockNote/Mantine dropdown menus z-index to appear above toolbar */
+/* Fix BlockNote/Mantine dropdown menus z-index to appear above toolbar but below modals */
 /* Target all Mantine dropdowns and menus */
 [class*="mantine-Popover-dropdown"],
 [class*="mantine-Menu-dropdown"],
 [class*="mantine-Select-dropdown"],
 [class*="mantine-Combobox-dropdown"] {
-  z-index: 1000 !important;
+  z-index: 150 !important;
   position: absolute !important;
 }
 
@@ -140,7 +177,7 @@ body,
 .bn-editor [role="listbox"],
 .bn-editor [role="combobox"],
 .bn-editor [role="dialog"] {
-  z-index: 1000 !important;
+  z-index: 150 !important;
 }
 
 /* Target portal-based dropdowns (Mantine renders them outside the editor) */
@@ -148,11 +185,21 @@ body > [class*="mantine-Popover-dropdown"],
 body > [class*="mantine-Menu-dropdown"],
 body > [class*="mantine-Select-dropdown"],
 [data-mantine-portal] {
-  z-index: 1000 !important;
+  z-index: 150 !important;
 }
 
 /* Ensure header stays on top */
 header {
   position: relative;
   z-index: 100 !important;
+}
+
+/* Prevent editor from being affected by modal opening/closing */
+/* Force editor background to stay #191919 in dark mode always */
+body[class*="dark"] .bn-editor,
+body[class*="dark"] .bn-editor *,
+html[class*="dark"] .bn-editor,
+html[class*="dark"] .bn-editor * {
+  background-color: #191919 !important;
+  background: #191919 !important;
 }

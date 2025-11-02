@@ -13,6 +13,7 @@ interface HeaderProps {
   onClearContent?: () => void;
   onExport?: (format: 'json' | 'markdown' | 'html') => void;
   onImport?: (content: string, format: 'json' | 'markdown' | 'html') => void;
+  onShowQRCode?: () => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
 }
@@ -25,6 +26,7 @@ export const Header = ({
   onClearContent,
   onExport,
   onImport,
+  onShowQRCode,
   sidebarOpen = true,
   onToggleSidebar
 }: HeaderProps) => {
@@ -114,6 +116,7 @@ export const Header = ({
         onClearContent={onClearContent}
         onExport={onExport}
         onImport={onImport}
+        onShowQRCode={onShowQRCode}
       />
     </header>
   );

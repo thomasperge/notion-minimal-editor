@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { X, Download, Trash2, FileText, FileCode, FileImage, RefreshCw, Save, Upload, Clipboard } from "lucide-react";
+import { X, Download, Trash2, FileText, FileCode, FileImage, RefreshCw, Save, Upload, Clipboard, QrCode } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface SettingsDialogProps {
@@ -11,6 +11,7 @@ interface SettingsDialogProps {
   onClearContent?: () => void;
   onExport?: (format: 'json' | 'markdown' | 'html') => void;
   onImport?: (content: string, format: 'json' | 'markdown' | 'html') => void;
+  onShowQRCode?: () => void;
 }
 
 export const SettingsDialog = ({ 
@@ -18,7 +19,8 @@ export const SettingsDialog = ({
   onOpenChange,
   onClearContent,
   onExport,
-  onImport
+  onImport,
+  onShowQRCode
 }: SettingsDialogProps) => {
   const [editorWidth, setEditorWidth] = useState<'narrow' | 'medium' | 'wide' | 'full'>('medium');
   const [autoSave, setAutoSave] = useState(true);
@@ -174,10 +176,12 @@ export const SettingsDialog = ({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={true}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-        <Dialog.Content className="fixed left-0 right-0 top-14 bottom-0 z-50 flex items-center justify-center p-4">
+        <Dialog.Overlay className="fixed inset-0 bg-black/50 z-[200]" />
+        <Dialog.Content 
+          className="fixed left-0 right-0 top-14 bottom-0 z-[210] flex items-center justify-center p-4"
+        >
           <div className="relative w-full max-w-lg max-h-[85vh] border bg-background dark:bg-[#1a1a1c] shadow-lg rounded-lg flex flex-col">
             <div className="p-6 flex flex-col flex-1 min-h-0">
               <Dialog.Title className="text-base font-semibold">Settings</Dialog.Title>
@@ -248,8 +252,8 @@ export const SettingsDialog = ({
                       </button>
                     </AlertDialog.Trigger>
                     <AlertDialog.Portal>
-                      <AlertDialog.Overlay className="fixed inset-0 bg-black/70 z-[100]" />
-                      <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[110] w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-6 shadow-lg rounded-lg gap-4">
+                      <AlertDialog.Overlay className="fixed inset-0 bg-black/70 z-[300]" />
+                      <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[310] w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-6 shadow-lg rounded-lg gap-4">
                         <AlertDialog.Title className="text-base font-semibold mb-2">Clear content?</AlertDialog.Title>
                         <AlertDialog.Description className="text-sm text-muted-foreground mb-4">
                           This action is irreversible. All your content will be deleted.
@@ -335,6 +339,40 @@ export const SettingsDialog = ({
                   </div>
                 </div>
 
+                {/* Send to iPhone */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium">Send to iPhone</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log('QR Code button clicked');
+                        // Close Settings first, then open QR Code modal
+                        // Radix UI doesn't support nested Dialog.Root, so we must close Settings first
+                        onOpenChange(false);
+                        // Use setTimeout to wait for Settings to close before opening QR Code
+                        // This ensures React has processed the state update
+                        setTimeout(() => {
+                          console.log('Opening QR Code modal after Settings closed');
+                          if (onShowQRCode) {
+                            onShowQRCode();
+                          }
+                        }, 100);
+                      }}
+                      className="flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-md border-2 border-primary bg-primary/10 hover:bg-primary/20 transition-colors text-primary font-medium"
+                      title="Generate QR code to scan with iPhone"
+                    >
+                      <QrCode className="h-5 w-5" />
+                      <span className="text-sm">QR Code</span>
+                    </button>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="text-center">
+                      Generate QR code and scan with your iPhone camera to get the content
+                    </p>
+                  </div>
+                </div>
+
                 {/* Information */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-medium">Information</h3>
@@ -369,8 +407,8 @@ export const SettingsDialog = ({
                       </button>
                     </AlertDialog.Trigger>
                     <AlertDialog.Portal>
-                      <AlertDialog.Overlay className="fixed inset-0 bg-black/70 z-[100]" />
-                      <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[110] w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-6 shadow-lg rounded-lg gap-4">
+                      <AlertDialog.Overlay className="fixed inset-0 bg-black/70 z-[300]" />
+                      <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[310] w-full max-w-md -translate-x-1/2 -translate-y-1/2 border bg-background dark:bg-[#1a1a1c] p-6 shadow-lg rounded-lg gap-4">
                         <AlertDialog.Title className="text-base font-semibold mb-2">Reset?</AlertDialog.Title>
                         <AlertDialog.Description className="text-sm text-muted-foreground mb-4">
                           All your settings and data will be deleted.
