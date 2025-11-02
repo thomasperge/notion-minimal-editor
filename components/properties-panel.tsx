@@ -162,7 +162,7 @@ export const PropertiesPanel = ({ selectedNode, onNodeChange, onNodeDelete }: Pr
               <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
                 {items.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4 border border-dashed border-gray-300 dark:border-gray-700 rounded">
-                    No items. Click "+ Add" to get started.
+                    No items. Click &quot;+ Add&quot; to get started.
                   </div>
                 ) : (
                   items.map((item: any, index: number) => (
