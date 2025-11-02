@@ -721,34 +721,86 @@ const HomePage = () => {
       }
       
       console.log('Step 4: Processing final content...');
-      // Encode content and create URL on our own site
-      // Use base64 encoding in URL hash for long content (hash doesn't go to server)
       const finalContent = finalMarkdownContent.trim() || '[Empty Document]';
       
-      console.log('Final content:', finalContent.substring(0, 100));
+      console.log('Step 5: Compressing content...');
       
-      console.log('Step 5: Encoding content...');
-
-      // Encode content to base64
-      const encoded = btoa(unescape(encodeURIComponent(finalContent)));
+      // Compress content using Compression Stream API to reduce URL size
+      // This allows much longer content to fit in a scannable QR code
+      let encoded: string;
+      
+      try {
+        // Try to use Compression Stream API (available in modern browsers)
+        if (typeof CompressionStream !== 'undefined') {
+          const stream = new CompressionStream('deflate');
+          const writer = stream.writable.getWriter();
+          const reader = stream.readable.getReader();
+          
+          writer.write(new TextEncoder().encode(finalContent));
+          writer.close();
+          
+          const chunks: Uint8Array[] = [];
+          let done = false;
+          
+          while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            if (value) {
+              chunks.push(value);
+            }
+          }
+          
+          const compressedData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+          let offset = 0;
+          for (const chunk of chunks) {
+            compressedData.set(chunk, offset);
+            offset += chunk.length;
+          }
+          
+          // Encode compressed data to base64
+          let binaryString = '';
+          for (let i = 0; i < compressedData.length; i++) {
+            binaryString += String.fromCharCode(compressedData[i]);
+          }
+          encoded = btoa(binaryString);
+          
+          console.log('Content compressed:', {
+            original: finalContent.length,
+            compressed: compressedData.length,
+            ratio: ((1 - compressedData.length / finalContent.length) * 100).toFixed(1) + '%'
+          });
+          
+          // Add prefix to indicate compression
+          encoded = 'c:' + encoded;
+        } else {
+          // Fallback: simple base64 encoding without compression
+          encoded = btoa(unescape(encodeURIComponent(finalContent)));
+          console.log('Compression not available, using base64 only');
+        }
+      } catch (compressionError) {
+        console.warn('Compression failed, falling back to base64:', compressionError);
+        // Fallback: simple base64 encoding
+        encoded = btoa(unescape(encodeURIComponent(finalContent)));
+      }
+      
       console.log('Step 6: Creating URL...');
       
       // Get current origin (works for localhost and production)
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       
-      // Create URL with hash (hash can be very long, doesn't hit server)
-      // Format: https://yoursite.com/view#base64encodedcontent
+      // Create URL with compressed content in hash
+      // Format: https://yoursite.com/view#c:compressedbase64content
       const viewUrl = `${origin}/view#${encoded}`;
       
       console.log('Step 7: Generating QR code URL...');
-      // For shorter URLs, we could use query param, but hash is better for long content
-      // QR code will point to our own site's /view page
+      // Compressed content means shorter URL = simpler QR code
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=H&data=${encodeURIComponent(viewUrl)}`;
       
-      console.log('QR Code generated with local URL:', {
+      console.log('QR Code generated:', {
         originalLength: markdownContent.length,
         encodedLength: encoded.length,
-        urlLength: viewUrl.length
+        urlLength: viewUrl.length,
+        compressionUsed: encoded.startsWith('c:')
       });
 
       // Set QR code data and open modal

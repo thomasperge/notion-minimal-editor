@@ -10,33 +10,90 @@ export default function ViewPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get content from URL hash (base64 encoded)
-    // Hash is used because it doesn't get sent to server and can be very long
+    // Get content from URL hash (base64 encoded, possibly compressed)
     const hash = window.location.hash.substring(1);
     
     if (hash) {
       try {
-        // Decode base64
-        const decoded = decodeURIComponent(atob(hash));
+        let decoded: string;
+        
+        // Check if content is compressed (starts with 'c:')
+        if (hash.startsWith('c:')) {
+          // Compressed content - decompress using Decompression Stream API
+          const base64Data = hash.substring(2); // Remove 'c:' prefix
+          
+          if (typeof DecompressionStream !== 'undefined') {
+            try {
+              const binaryString = atob(base64Data);
+              const compressedData = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                compressedData[i] = binaryString.charCodeAt(i);
+              }
+              
+              const stream = new DecompressionStream('deflate');
+              const writer = stream.writable.getWriter();
+              const reader = stream.readable.getReader();
+              
+              writer.write(compressedData);
+              writer.close();
+              
+              const chunks: Uint8Array[] = [];
+              let done = false;
+              
+              while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                  chunks.push(value);
+                }
+              }
+              
+              const decompressedData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+              let offset = 0;
+              for (const chunk of chunks) {
+                decompressedData.set(chunk, offset);
+                offset += chunk.length;
+              }
+              
+              decoded = new TextDecoder().decode(decompressedData);
+            } catch (decompressionError) {
+              console.error('Decompression failed:', decompressionError);
+              throw decompressionError;
+            }
+          } else {
+            // Decompression API not available - show error
+            setContent('Error: Your browser does not support decompression. Please use a modern browser.');
+            setTitle('Error');
+            setLoading(false);
+            return;
+          }
+        } else {
+          // Not compressed - simple base64 decode
+          decoded = decodeURIComponent(escape(atob(hash)));
+        }
+        
         setContent(decoded);
         
         // Try to extract title from first line if it's markdown
         const firstLine = decoded.split('\n')[0];
         if (firstLine && firstLine.startsWith('# ')) {
           setTitle(firstLine.substring(2));
+        } else {
+          setTitle('Shared Document');
         }
         setLoading(false);
       } catch (error) {
         console.error('Error decoding content:', error);
-        setContent('Error: Could not decode content');
+        setContent('Error: Could not decode content. The QR code may be corrupted.');
+        setTitle('Error');
         setLoading(false);
       }
     } else {
-      // Fallback: try to get from query params (for shorter content)
+      // Fallback: try to get from query params (old method)
       const encoded = searchParams.get('t');
       if (encoded) {
         try {
-          const decoded = decodeURIComponent(atob(encoded));
+          const decoded = decodeURIComponent(escape(atob(encoded)));
           setContent(decoded);
           setLoading(false);
         } catch (error) {
