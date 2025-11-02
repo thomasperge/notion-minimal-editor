@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, PanelLeftClose, HelpCircle, Github, GitBranch, FileText } from "lucide-react";
+import { Plus, PanelLeftClose, HelpCircle, Github, GitBranch, FileText, FileSpreadsheet } from "lucide-react";
 import { useDocumentsContext } from "@/components/providers/documents-provider";
 import { DocumentItem } from "./document-item";
 import { useState, useRef, useEffect } from "react";
@@ -33,6 +33,11 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
 
   const handleCreateCanvas = () => {
     createDocument('canvas');
+    setShowCreateMenu(false);
+  };
+
+  const handleCreateDatabase = () => {
+    createDocument('database');
     setShowCreateMenu(false);
   };
 
@@ -105,6 +110,13 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
                 >
                   <GitBranch className="h-4 w-4" />
                   New canvas
+                </button>
+                <button
+                  onClick={handleCreateDatabase}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  New database
                 </button>
               </div>
             )}

@@ -7,7 +7,7 @@ export interface Document {
   title: string;
   createdAt: string;
   updatedAt: string;
-  type: 'document' | 'canvas'; // Type de document
+  type: 'document' | 'canvas' | 'database'; // Type de document
 }
 
 const DOCUMENTS_LIST_KEY = "documents-list";
@@ -203,7 +203,7 @@ export const useDocuments = () => {
   }, []);
 
   // Create a new document
-  const createDocument = useCallback((type: 'document' | 'canvas' = 'document'): Document => {
+  const createDocument = useCallback((type: 'document' | 'canvas' | 'database' = 'document'): Document => {
     const newDoc: Document = {
       id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: "Untitled",
@@ -218,7 +218,19 @@ export const useDocuments = () => {
     localStorage.setItem(CURRENT_DOCUMENT_KEY, newDoc.id);
 
     // Initialize empty content for the document
-    localStorage.setItem(`${DOCUMENT_PREFIX}${newDoc.id}`, JSON.stringify([]));
+    const initialContent = type === 'database' 
+      ? JSON.stringify({
+          columns: [
+            { id: 'col-1', name: 'Name', type: 'text' },
+            { id: 'col-2', name: 'Status', type: 'text' },
+            { id: 'col-3', name: 'Date', type: 'date' }
+          ],
+          rows: [
+            { id: 'row-1', 'col-1': '', 'col-2': '', 'col-3': '' }
+          ]
+        }, null, 2)
+      : JSON.stringify([]);
+    localStorage.setItem(`${DOCUMENT_PREFIX}${newDoc.id}`, initialContent);
 
     return newDoc;
   }, [documents, saveDocumentsList, setCurrentDocumentId]);

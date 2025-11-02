@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { FileText, MoreVertical, Trash2, Copy, Edit2, GitBranch } from "lucide-react";
+import { FileText, MoreVertical, Trash2, Copy, Edit2, GitBranch, FileSpreadsheet } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Document } from "@/hooks/use-documents";
 
@@ -99,6 +99,8 @@ export const DocumentItem = ({
     >
       {document.type === 'canvas' ? (
         <GitBranch className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      ) : document.type === 'database' ? (
+        <FileSpreadsheet className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       ) : (
         <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       )}

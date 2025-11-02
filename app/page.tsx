@@ -15,6 +15,7 @@ import * as QRCode from "qrcode";
 const HomePage = () => {
   const Editor = useMemo(() => dynamic(() => import("@/components/editor"), { ssr: false }) ,[]);
   const CanvasEditor = useMemo(() => dynamic(() => import("@/components/canvas-editor"), { ssr: false }) ,[]);
+  const DatabaseEditor = useMemo(() => dynamic(() => import("@/components/database-editor").then(mod => ({ default: mod.default })), { ssr: false }) ,[]);
   const editorRef = useRef<BlockNoteEditor | null>(null);
   const previousDocumentIdRef = useRef<string | null>(null);
   const pendingSaveRef = useRef<string | null>(null);
@@ -1034,10 +1035,21 @@ const HomePage = () => {
         {isLoaded && isContentLoaded && documentsLoaded && (() => {
           const currentDoc = documents.find(doc => doc.id === currentDocumentId);
           const isCanvas = currentDoc?.type === 'canvas';
+          const isDatabase = currentDoc?.type === 'database';
           
           if (isCanvas) {
             return (
               <CanvasEditor
+                key={editorKey || currentDocumentId}
+                initialContent={initialContent}
+                onChange={handleContentChange}
+              />
+            );
+          }
+          
+          if (isDatabase) {
+            return (
+              <DatabaseEditor
                 key={editorKey || currentDocumentId}
                 initialContent={initialContent}
                 onChange={handleContentChange}
