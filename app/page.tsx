@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
@@ -791,7 +792,7 @@ const HomePage = () => {
       const savedAutoSave = localStorage.getItem('editor-autoSave');
       if (savedAutoSave !== null) {
         const autoSaveValue = savedAutoSave === 'true';
-        if (savedAutoSave !== String(autoSave)) {
+        if (savedAutoSave !== String(autoSaveRef.current)) {
           setAutoSave(autoSaveValue);
         }
         autoSaveRef.current = autoSaveValue;
@@ -879,10 +880,13 @@ const HomePage = () => {
             {qrCodeData && (
               <>
                 <div className="flex justify-center mb-3">
-                  <img 
+                  <Image 
                     src={qrCodeData.url} 
                     alt="QR Code" 
+                    width={400}
+                    height={400}
                     className="w-full max-w-[400px] h-auto border-2 border-border rounded-lg bg-white p-2"
+                    unoptimized
                   />
                 </div>
                 
@@ -896,14 +900,14 @@ const HomePage = () => {
                     <li>Open Camera on iPhone</li>
                     <li>Point at QR code (zoom in if needed)</li>
                     <li>Safari will open with the content</li>
-                    <li>Tap "Copy Text" button</li>
+                    <li>Tap &quot;Copy Text&quot; button</li>
                   </ol>
                 </div>
                 
                 {qrCodeData && qrCodeData.contentLength > 3000 && (
                   <div className="bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-md mb-3">
                     <p className="text-xs text-yellow-700 dark:text-yellow-400 text-center">
-                      ⚠️ Content is large. If QR code doesn't scan, use Export + AirDrop instead.
+                      ⚠️ Content is large. If QR code doesn&apos;t scan, use Export + AirDrop instead.
                     </p>
                   </div>
                 )}
