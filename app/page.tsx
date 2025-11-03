@@ -137,7 +137,21 @@ const HomePage = () => {
       if (content) {
         try {
           // Validate content
-          const parsed = JSON.parse(content);
+          let parsed = JSON.parse(content);
+          
+          // Handle legacy format: if content is wrapped in array with canvas format
+          // Extract it (e.g., [{ nodes, edges }] -> { nodes, edges })
+          if (Array.isArray(parsed) && parsed.length === 1 && typeof parsed[0] === 'object' && parsed[0].nodes && parsed[0].edges) {
+            console.log(`🔄 Detected legacy wrapped format, extracting canvas content`);
+            parsed = parsed[0];
+            // Re-save in correct format
+            const correctContent = JSON.stringify(parsed);
+            localStorage.setItem(`document-${currentDocumentId}`, correctContent);
+            saveDocumentContent(currentDocumentId, correctContent);
+            setInitialContent(correctContent);
+            return;
+          }
+          
           // Accept both arrays (BlockNote) and objects with nodes/edges (React Flow)
           if (Array.isArray(parsed) || (typeof parsed === 'object' && parsed.nodes && parsed.edges)) {
             const lengthInfo = Array.isArray(parsed) 

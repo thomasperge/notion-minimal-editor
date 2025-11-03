@@ -34,7 +34,7 @@ export const useDocuments = () => {
         }
 
         const docs = documentsList ? JSON.parse(documentsList) : [];
-        
+
         if (currentId) {
           setCurrentDocumentId(currentId);
         } else {
@@ -51,7 +51,7 @@ export const useDocuments = () => {
               updatedAt: new Date().toISOString(),
               type: 'document',
             };
-            
+
             // Default welcome content
             const welcomeContent = [
               {
@@ -153,12 +153,12 @@ export const useDocuments = () => {
                 ]
               }
             ];
-            
+
             const initialDocs = [defaultDoc];
             localStorage.setItem(DOCUMENTS_LIST_KEY, JSON.stringify(initialDocs));
             localStorage.setItem(CURRENT_DOCUMENT_KEY, defaultDoc.id);
             localStorage.setItem(`${DOCUMENT_PREFIX}${defaultDoc.id}`, JSON.stringify(welcomeContent));
-            
+
             setDocuments(initialDocs);
             setCurrentDocumentId(defaultDoc.id);
           }
@@ -294,49 +294,71 @@ export const useDocuments = () => {
 
   // Save document content with validation
   const saveDocumentContent = useCallback((id: string, content: string) => {
-    if (typeof window === "undefined" || !id || !content) {
+    if (typeof window === "undefined" || !id) {
       console.warn("⚠️ Invalid save parameters:", { id, hasContent: !!content });
       return;
     }
 
     try {
-      // Validate content is valid JSON and array
-      const parsed = JSON.parse(content);
-      if (!Array.isArray(parsed)) {
-        console.error(`❌ Content for document ${id} is not an array`);
+      console.log(`💾 Attempting to save document ${id}...`);
+
+      let parsed;
+      try {
+        parsed = JSON.parse(content);
+      } catch (err) {
+        console.error(`❌ Failed to parse content for document ${id}:`, err);
         return;
       }
 
-      // Save with explicit key
+      // 🔍 Log useful debug info
+      const isArray = Array.isArray(parsed);
+      const isCanvasFormat = typeof parsed === 'object' && parsed !== null && parsed.nodes && parsed.edges;
+      console.log(`📄 Parsed content type for ${id}:`, typeof parsed, isArray ? "✅ array" : isCanvasFormat ? "✅ canvas" : "❌ unknown");
+
+      // ✅ Accept both formats:
+      // - Arrays (for BlockNote editor)
+      // - Objects with nodes/edges (for Canvas editor)
+      // Only normalize if it's neither format
+      let normalizedContent: string;
+      if (isArray || isCanvasFormat) {
+        // Keep original format for BlockNote (array) or Canvas (object with nodes/edges)
+        normalizedContent = JSON.stringify(parsed);
+      } else {
+        console.warn(`⚠️ Unknown content format for ${id} (was ${typeof parsed}), wrapping in array`);
+        normalizedContent = JSON.stringify([parsed]); // wrap in array as fallback
+      }
+
       const storageKey = `${DOCUMENT_PREFIX}${id}`;
-      localStorage.setItem(storageKey, content);
-      
-      // Verify save was successful
+      localStorage.setItem(storageKey, normalizedContent);
+
+      // Verify save
       const saved = localStorage.getItem(storageKey);
-      if (saved !== content) {
-        console.error(`❌ Failed to verify save for document ${id}`);
+      if (saved !== normalizedContent) {
+        console.error(`❌ Verification failed for document ${id}`);
         return;
       }
 
-      // Update document's updatedAt metadata
+      // Update "updatedAt"
       setDocuments(prevDocs => {
         const updatedDocs = prevDocs.map((doc) =>
           doc.id === id ? { ...doc, updatedAt: new Date().toISOString() } : doc
         );
-        
-        // Save metadata to localStorage
-        if (typeof window !== "undefined") {
-          localStorage.setItem(DOCUMENTS_LIST_KEY, JSON.stringify(updatedDocs));
-        }
-        
+
+        localStorage.setItem(DOCUMENTS_LIST_KEY, JSON.stringify(updatedDocs));
         return updatedDocs;
       });
 
-      console.log(`✅ Successfully saved document ${id} (${parsed.length} blocks)`);
+      if (isCanvasFormat) {
+        console.log(`✅ Successfully saved canvas document ${id} (${parsed.nodes?.length || 0} nodes, ${parsed.edges?.length || 0} edges)`);
+      } else {
+        console.log(`✅ Successfully saved document ${id} (${Array.isArray(parsed) ? parsed.length : 1} blocks)`);
+      }
+
     } catch (error) {
       console.error(`❌ Error saving document ${id}:`, error);
     }
   }, []);
+
 
   // Switch to a document
   const switchToDocument = useCallback((id: string) => {

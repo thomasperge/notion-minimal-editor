@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Handle, Position, NodeProps, useReactFlow } from "@xyflow/react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
 
 interface TextInputNodeData extends Record<string, unknown> {
   text?: string;
@@ -16,18 +16,46 @@ export const TextInputNode = ({ id, data, selected }: any) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isAdjustingRef = useRef(false);
+  const lastAdjustTimeRef = useRef(0);
+  const lastProcessedTextRef = useRef<string>(nodeData.text || "");
+  const lastProcessedTextTypeRef = useRef<string | undefined>(nodeData.textType);
+
+  // Initialiser les valeurs au montage
+  useEffect(() => {
+    if (lastProcessedTextRef.current !== (nodeData.text || "") || lastProcessedTextTypeRef.current !== nodeData.textType) {
+      lastProcessedTextRef.current = nodeData.text || "";
+      lastProcessedTextTypeRef.current = nodeData.textType;
+    }
+  }, []);
 
   // Sync local text when data changes externally
   useEffect(() => {
-    setLocalText(nodeData.text || "");
-  }, [nodeData.text]);
+    const newText = nodeData.text || "";
+    if (newText !== lastProcessedTextRef.current || nodeData.textType !== lastProcessedTextTypeRef.current) {
+      setLocalText(newText);
+      lastProcessedTextRef.current = newText;
+      lastProcessedTextTypeRef.current = nodeData.textType;
+    }
+  }, [nodeData.text, nodeData.textType]);
 
   // Auto-resize textarea width and height
-  const adjustTextareaSize = (preserveCursor: boolean = false) => {
+  const adjustTextareaSize = (force: boolean = false) => {
     if (!textareaRef.current || !measureRef.current || !containerRef.current) return;
-
-    // Save cursor position
-    const cursorPosition = preserveCursor && textareaRef.current ? textareaRef.current.selectionStart : null;
+    
+    // Ne pas ajuster si le texte et le type n'ont pas changé (sauf si forcé)
+    if (!force && localText === lastProcessedTextRef.current && nodeData.textType === lastProcessedTextTypeRef.current) {
+      return;
+    }
+    
+    // Éviter les ajustements trop fréquents (debounce naturel)
+    const now = Date.now();
+    if (now - lastAdjustTimeRef.current < 16) return; // ~60fps max
+    lastAdjustTimeRef.current = now;
+    
+    // Éviter les ajustements multiples simultanés
+    if (isAdjustingRef.current) return;
+    isAdjustingRef.current = true;
 
     const text = localText || "";
     
@@ -48,9 +76,9 @@ export const TextInputNode = ({ id, data, selected }: any) => {
     
     const textWidth = measureRef.current.scrollWidth;
     const minWidth = 200;
-    const maxWidth = 800; // Max width reasonable
-    const padding = 24; // px-3 = 12px on each side
-    const textareaPadding = 16; // px-2 = 8px on each side
+    const maxWidth = 800;
+    const padding = 24;
+    const textareaPadding = 16;
     
     // Calculate optimal width (with padding)
     const optimalWidth = Math.max(minWidth, Math.min(maxWidth, textWidth + padding + textareaPadding));
@@ -59,39 +87,30 @@ export const TextInputNode = ({ id, data, selected }: any) => {
     containerRef.current.style.width = `${optimalWidth}px`;
     textareaRef.current.style.width = '100%';
     
-    // Adjust height
+    // Adjust height - s'assurer que tout le texte est visible
     textareaRef.current.style.height = 'auto';
-    textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+    const scrollHeight = textareaRef.current.scrollHeight;
+    textareaRef.current.style.height = `${scrollHeight}px`;
     
-    // Restore cursor position
-    if (preserveCursor && cursorPosition !== null && textareaRef.current) {
-      requestAnimationFrame(() => {
-        if (textareaRef.current) {
-          textareaRef.current.setSelectionRange(cursorPosition, cursorPosition);
-        }
-      });
+    // Vérifier à nouveau après ajustement pour s'assurer que tout est visible
+    if (textareaRef.current.scrollHeight > scrollHeight) {
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
+    
+    // Mettre à jour les références après ajustement
+    lastProcessedTextRef.current = text;
+    lastProcessedTextTypeRef.current = nodeData.textType;
+    isAdjustingRef.current = false;
   };
 
   // Auto-resize textarea
   const handleTextChange = (evt: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = evt.target.value;
-    const cursorPosition = evt.target.selectionStart;
-    
     setLocalText(newText);
     
-    // Adjust size immediately while preserving cursor
+    // Ajuster immédiatement la taille pendant la saisie
     requestAnimationFrame(() => {
-      if (textareaRef.current) {
-        adjustTextareaSize(true);
-        // Restore cursor position after adjustment
-        requestAnimationFrame(() => {
-          if (textareaRef.current) {
-            const newCursorPosition = Math.min(cursorPosition, newText.length);
-            textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
-          }
-        });
-      }
+      adjustTextareaSize();
     });
     
     // Update node data
@@ -104,11 +123,22 @@ export const TextInputNode = ({ id, data, selected }: any) => {
     );
   };
 
-  // Initialize and adjust size when text changes externally (not during typing)
-  useEffect(() => {
-    // Only adjust if not currently focused (to avoid cursor jumping during external updates)
+  // Ajuster la taille au montage pour s'assurer que le texte initial est affiché
+  useLayoutEffect(() => {
+    // Forcer l'ajustement au montage pour afficher tout le texte initial
+    if (textareaRef.current) {
+      adjustTextareaSize(true);
+    }
+  }, []);
+
+  // Ajuster la taille après les changements de layout (useLayoutEffect s'exécute avant le paint)
+  // Seulement si le textarea n'est pas en focus et que quelque chose a vraiment changé
+  useLayoutEffect(() => {
     if (textareaRef.current && document.activeElement !== textareaRef.current) {
-      adjustTextareaSize(false);
+      // Vérifier si quelque chose a vraiment changé avant d'ajuster
+      if (localText !== lastProcessedTextRef.current || nodeData.textType !== lastProcessedTextTypeRef.current) {
+        adjustTextareaSize();
+      }
     }
   }, [localText, nodeData.textType]);
 
@@ -158,9 +188,8 @@ export const TextInputNode = ({ id, data, selected }: any) => {
             }`}
             style={{
               minHeight: nodeData.textType === "h1" ? '48px' : nodeData.textType === "h2" ? '40px' : '32px',
-              maxHeight: '200px',
               lineHeight: nodeData.textType === "h1" ? '2rem' : nodeData.textType === "h2" ? '1.75rem' : '1.25rem',
-              overflowY: 'auto',
+              overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           />
@@ -185,7 +214,6 @@ export const TextInputNode = ({ id, data, selected }: any) => {
         />
       </div>
 
-
       <style>{`
         .react-flow__node.react-flow__node-textInput {
           background: none !important;
@@ -195,4 +223,3 @@ export const TextInputNode = ({ id, data, selected }: any) => {
     </>
   );
 };
-

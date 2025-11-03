@@ -27,6 +27,7 @@ import { TodoListNode } from "./nodes/todo-list-node";
 import { PropertiesPanel } from "./properties-panel";
 import { BlockSearchMenu } from "./block-search-menu";
 import { useAlignmentGuides } from "./alignment-guides";
+import { EdgeStyleControls } from "./edge-style-controls";
 import { PanelRightClose, PanelRight } from "lucide-react";
 
 interface CanvasEditorProps {
@@ -46,7 +47,36 @@ const CanvasEditor = ({
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [blockMenuPosition, setBlockMenuPosition] = useState<{ x: number; y: number } | undefined>();
-  const [propertiesPanelOpen, setPropertiesPanelOpen] = useState(true);
+  const [propertiesPanelOpen, setPropertiesPanelOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("properties-panel-open");
+      if (saved !== null) {
+        return saved === "true";
+      }
+    }
+    return false; // Par défaut fermé pour les nouveaux canvas
+  });
+  const [edgeStyle, setEdgeStyle] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("edge-style");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Migration : ajouter markerType si absent (anciennes sauvegardes)
+        if (!parsed.markerType) {
+          parsed.markerType = "none";
+        }
+        return parsed;
+      }
+    }
+    return {
+      type: "bezier" as const,
+      strokeWidth: 2,
+      strokeDasharray: "5,5", // Pointillé par défaut
+      stroke: "#888",
+      animated: true, // Animé par défaut
+      markerType: "none" as const, // Pas de flèche par défaut
+    };
+  });
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
 
   // Define node types
@@ -76,25 +106,44 @@ const CanvasEditor = ({
             return hasValidSource && hasValidTarget;
           });
 
-          return { initialNodes: parsed.nodes, initialEdges: validEdges };
+          // Appliquer les styles par défaut aux edges chargés
+          const styledEdges = validEdges.map((edge: Edge) => {
+            const styledEdge: any = {
+              ...edge,
+              type: edgeStyle.type,
+              animated: edgeStyle.animated,
+              style: {
+                ...edge.style,
+                strokeWidth: edgeStyle.strokeWidth,
+                strokeDasharray: edgeStyle.strokeDasharray,
+                stroke: edgeStyle.stroke,
+              },
+            };
+
+            // Appliquer ou retirer le marker selon le choix
+            if (edgeStyle.markerType === "none") {
+              delete styledEdge.markerEnd;
+            } else {
+              styledEdge.markerEnd = {
+                type: edgeStyle.markerType === "arrowclosed" ? MarkerType.ArrowClosed : MarkerType.Arrow,
+              };
+            }
+
+            return styledEdge;
+          });
+
+          return { initialNodes: parsed.nodes, initialEdges: styledEdges };
         }
       } catch (error) {
         console.error("Failed to parse initialContent:", error);
       }
     }
-    // Default initial state with a welcome node
+    // Default initial state - empty canvas
     return {
-      initialNodes: [
-        {
-          id: "welcome-1",
-          type: "textInput",
-          data: { text: "Welcome to your canvas! 👋\n\nStart by adding nodes using the '+' button or press '/' to search." },
-          position: { x: 250, y: 250 },
-        },
-      ],
+      initialNodes: [],
       initialEdges: [],
     };
-  }, [initialContent]);
+  }, [initialContent, edgeStyle]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(parsedContent.initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(parsedContent.initialEdges);
@@ -135,22 +184,99 @@ const CanvasEditor = ({
   // Handle new connections
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) =>
-        addEdge(
-          {
-            ...params,
-            type: "smoothstep",
-            animated: true,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-            },
-          },
-          eds
-        )
-      );
+      const edgeConfig: any = {
+        ...params,
+        type: edgeStyle.type,
+        animated: edgeStyle.animated,
+        style: {
+          strokeWidth: edgeStyle.strokeWidth,
+          strokeDasharray: edgeStyle.strokeDasharray,
+          stroke: edgeStyle.stroke,
+        },
+      };
+
+      // Ajouter le marker seulement si ce n'est pas "none"
+      if (edgeStyle.markerType !== "none") {
+        edgeConfig.markerEnd = {
+          type: edgeStyle.markerType === "arrowclosed" ? MarkerType.ArrowClosed : MarkerType.Arrow,
+        };
+      }
+
+      setEdges((eds) => addEdge(edgeConfig, eds));
     },
-    [setEdges]
+    [setEdges, edgeStyle]
   );
+
+  // Appliquer les styles aux edges quand edgeStyle change
+  useEffect(() => {
+    if (edges.length > 0) {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          // Vérifier si les styles ont déjà été appliqués
+          const currentType = edge.type || "smoothstep";
+          const currentStyle = edge.style || {};
+          // Déterminer le type de marker actuel
+          const markerEnd = edge.markerEnd;
+          let currentMarkerType = "none";
+          if (markerEnd && typeof markerEnd === "object" && "type" in markerEnd) {
+            const markerType = markerEnd.type;
+            if (markerType === MarkerType.ArrowClosed) {
+              currentMarkerType = "arrowclosed";
+            } else if (markerType === MarkerType.Arrow) {
+              currentMarkerType = "arrow";
+            }
+          }
+          
+          const needsUpdate =
+            currentType !== edgeStyle.type ||
+            currentStyle.strokeWidth !== edgeStyle.strokeWidth ||
+            currentStyle.strokeDasharray !== edgeStyle.strokeDasharray ||
+            currentStyle.stroke !== edgeStyle.stroke ||
+            edge.animated !== edgeStyle.animated ||
+            currentMarkerType !== edgeStyle.markerType;
+
+          if (!needsUpdate) return edge;
+
+          const updatedEdge: any = {
+            ...edge,
+            type: edgeStyle.type,
+            style: {
+              ...currentStyle,
+              strokeWidth: edgeStyle.strokeWidth,
+              strokeDasharray: edgeStyle.strokeDasharray,
+              stroke: edgeStyle.stroke,
+            },
+            animated: edgeStyle.animated,
+          };
+
+          // Appliquer ou retirer le marker selon le choix
+          if (edgeStyle.markerType === "none") {
+            delete updatedEdge.markerEnd;
+          } else {
+            updatedEdge.markerEnd = {
+              type: edgeStyle.markerType === "arrowclosed" ? MarkerType.ArrowClosed : MarkerType.Arrow,
+            };
+          }
+
+          return updatedEdge;
+        })
+      );
+    }
+  }, [edgeStyle, setEdges]); // Appliquer quand edgeStyle change
+
+  // Sauvegarder edgeStyle dans localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("edge-style", JSON.stringify(edgeStyle));
+    }
+  }, [edgeStyle]);
+
+  // Sauvegarder l'état du properties panel dans localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("properties-panel-open", propertiesPanelOpen.toString());
+    }
+  }, [propertiesPanelOpen]);
 
   // Handle block search menu (triggered by "/" or other shortcut) and node deletion
   useEffect(() => {
@@ -539,6 +665,7 @@ const CanvasEditor = ({
           onSelectBlock={handleSelectBlockWithPosition}
           position={blockMenuPosition}
         />
+
       </div>
     );
   };
@@ -555,16 +682,52 @@ const CanvasEditor = ({
           propertiesPanelOpen={propertiesPanelOpen}
           onTogglePropertiesPanel={() => setPropertiesPanelOpen(!propertiesPanelOpen)}
         />
-        {/* Zoom Controls - Positioned relative to canvas, not sidebar */}
+        {/* Bottom Right Controls Container - Zoom + Edge Style */}
         <div
-          className="absolute bottom-4 z-[100] pointer-events-auto"
+          className="absolute bottom-4 z-[100] pointer-events-auto flex items-center gap-2"
           style={{
-            right: propertiesPanelOpen ? '336px' : '16px', // 320px (sidebar) + 16px margin from canvas edge, or just 16px if closed
+            right: propertiesPanelOpen ? '336px' : '16px', // 320px (sidebar) + 16px margin, ou 16px pour coller au bord
             bottom: '16px',
           }}
-          data-testid="zoom-controls-fixed"
+          data-testid="bottom-controls-container"
         >
+          {/* Zoom Controls - À gauche */}
           <ZoomControlsStatic hasSelectedNode={!!selectedNode} />
+          {/* Edge Style Controls - À droite du zoom */}
+          <EdgeStyleControls
+            edgeStyle={edgeStyle}
+            propertiesPanelOpen={propertiesPanelOpen}
+            onStyleChange={(newStyle) => {
+              setEdgeStyle(newStyle);
+              // Appliquer les styles à tous les edges existants
+              setEdges((eds) =>
+                eds.map((edge) => {
+                  const updatedEdge: any = {
+                    ...edge,
+                    type: newStyle.type,
+                    style: {
+                      ...edge.style,
+                      strokeWidth: newStyle.strokeWidth,
+                      strokeDasharray: newStyle.strokeDasharray,
+                      stroke: newStyle.stroke,
+                    },
+                    animated: newStyle.animated,
+                  };
+
+                  // Appliquer ou retirer le marker selon le choix
+                  if (newStyle.markerType === "none") {
+                    delete updatedEdge.markerEnd;
+                  } else {
+                    updatedEdge.markerEnd = {
+                      type: newStyle.markerType === "arrowclosed" ? MarkerType.ArrowClosed : MarkerType.Arrow,
+                    };
+                  }
+
+                  return updatedEdge;
+                })
+              );
+            }}
+          />
         </div>
       </ReactFlowProvider>
 

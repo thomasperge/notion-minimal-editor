@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { Node } from "@xyflow/react";
 import { Play, MoreVertical, Trash2, X } from "lucide-react";
 
@@ -9,6 +9,126 @@ interface PropertiesPanelProps {
   onNodeChange?: (nodeId: string, data: any) => void;
   onNodeDelete?: (nodeId: string) => void;
 }
+
+// Composant séparé pour les propriétés d'image (pour utiliser des hooks)
+const ImageInputProperties = ({
+  selectedNode,
+  nodeData,
+  onNodeChange,
+}: {
+  selectedNode: Node;
+  nodeData: any;
+  onNodeChange?: (nodeId: string, data: any) => void;
+}) => {
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const [isLoadingImage, setIsLoadingImage] = useState(false);
+
+  const handleImageFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      if (!file.type.startsWith("image/")) {
+        alert("Veuillez sélectionner un fichier image");
+        if (imageFileInputRef.current) {
+          imageFileInputRef.current.value = "";
+        }
+        return;
+      }
+
+      setIsLoadingImage(true);
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        const result = e.target?.result;
+        if (typeof result === "string" && onNodeChange) {
+          onNodeChange(selectedNode.id, { ...nodeData, imageUrl: result });
+        }
+        setIsLoadingImage(false);
+        if (imageFileInputRef.current) {
+          imageFileInputRef.current.value = "";
+        }
+      };
+
+      reader.onerror = () => {
+        console.error("Erreur lors de la lecture du fichier");
+        setIsLoadingImage(false);
+        if (imageFileInputRef.current) {
+          imageFileInputRef.current.value = "";
+        }
+      };
+
+      reader.readAsDataURL(file);
+    },
+    [selectedNode.id, nodeData, onNodeChange]
+  );
+
+  const handleChangeImageClick = useCallback(() => {
+    imageFileInputRef.current?.click();
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-2 block">
+          Image
+        </label>
+        {typeof nodeData.imageUrl === "string" && nodeData.imageUrl ? (
+          <div className="space-y-2">
+            <img
+              src={nodeData.imageUrl}
+              alt="Preview"
+              className="w-full rounded border border-gray-300 dark:border-gray-600 max-h-48 object-contain bg-gray-50 dark:bg-gray-900"
+              onError={() => {
+                console.error("Erreur lors de l'affichage de l'image");
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleChangeImageClick}
+              disabled={isLoadingImage}
+              className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded bg-background hover:bg-gray-50 dark:hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoadingImage ? "Chargement..." : "Changer l'image"}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleChangeImageClick}
+            disabled={isLoadingImage}
+            className="w-full px-3 py-2 text-xs border-2 border-dashed border-gray-300 dark:border-gray-600 rounded bg-background hover:bg-gray-50 dark:hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoadingImage ? "Chargement..." : "Sélectionner une image"}
+          </button>
+        )}
+        <input
+          ref={imageFileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageFileSelect}
+          className="hidden"
+        />
+      </div>
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-2 block">
+          Image URL
+        </label>
+        <input
+          type="text"
+          value={typeof nodeData.imageUrl === "string" ? nodeData.imageUrl : ""}
+          onChange={(e) => {
+            if (onNodeChange) {
+              onNodeChange(selectedNode.id, { ...nodeData, imageUrl: e.target.value });
+            }
+          }}
+          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Ou entrez une URL d'image..."
+        />
+      </div>
+    </div>
+  );
+};
 
 export const PropertiesPanel = ({ selectedNode, onNodeChange, onNodeDelete }: PropertiesPanelProps) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -91,24 +211,11 @@ export const PropertiesPanel = ({ selectedNode, onNodeChange, onNodeDelete }: Pr
 
       case "imageInput":
         return (
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-2 block">
-                Image URL
-              </label>
-              <input
-                type="text"
-                value={typeof nodeData.imageUrl === "string" ? nodeData.imageUrl : ""}
-                onChange={(e) => {
-                  if (onNodeChange) {
-                    onNodeChange(selectedNode.id, { ...nodeData, imageUrl: e.target.value });
-                  }
-                }}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-background focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter image URL..."
-              />
-            </div>
-          </div>
+          <ImageInputProperties
+            selectedNode={selectedNode}
+            nodeData={nodeData}
+            onNodeChange={onNodeChange}
+          />
         );
 
       case "numberInput":
