@@ -11,6 +11,7 @@ import {
 } from "@blocknote/react";
 import "@blocknote/core/style.css";
 import { useEffect, useCallback, useMemo } from "react";
+import { compressImage } from "../utils/image-compression";
 
 interface EditorProps {
   onChange?: (value: string) => void;
@@ -28,37 +29,43 @@ const Editor = ({
   const { resolvedTheme } = useTheme();
 
   const handleUpload = useCallback(async (file: File): Promise<string> => {
-    // Create a blob URL that works immediately (temporary solution)
-    // For production, you'd want to upload to a proper storage service
-    return new Promise((resolve, reject) => {
-      // Strict validation: Check both MIME type and file extension
-      const validImageTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'];
-      const validExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
-      
-      const fileName = file.name.toLowerCase();
-      const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
-      const isValidMimeType = file.type.startsWith('image/') && validImageTypes.includes(file.type);
-      const isValidExtension = validExtensions.includes(fileExtension);
+    // Strict validation: Check both MIME type and file extension
+    const validImageTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'];
+    const validExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
+    
+    const fileName = file.name.toLowerCase();
+    const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+    const isValidMimeType = file.type.startsWith('image/') && validImageTypes.includes(file.type);
+    const isValidExtension = validExtensions.includes(fileExtension);
 
-      if (!isValidMimeType || !isValidExtension) {
-        reject(new Error('Only image files are allowed (PNG, JPG, GIF, WebP, BMP, SVG)'));
-        return;
-      }
+    if (!isValidMimeType || !isValidExtension) {
+      throw new Error('Only image files are allowed (PNG, JPG, GIF, WebP, BMP, SVG)');
+    }
 
-      // For small images, use data URL (base64)
-      // For larger images, you might want to use a storage service
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        resolve(dataUrl);
-      };
-      reader.onerror = () => {
-        // Fallback: create blob URL
-        const blobUrl = URL.createObjectURL(file);
-        resolve(blobUrl);
-      };
-      reader.readAsDataURL(file);
-    });
+    // Compresser l'image avant de la sauvegarder (même compression que pour les canvas)
+    try {
+      const compressedDataUrl = await compressImage(file, {
+        maxWidth: 600,
+        maxHeight: 600,
+        quality: 0.65,
+        maxSizeKB: 120,
+      });
+      return compressedDataUrl;
+    } catch (error) {
+      console.error("Erreur lors de la compression de l'image:", error);
+      // Fallback: utiliser l'image originale non compressée (mais en data URL pour la sauvegarde)
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          resolve(dataUrl);
+        };
+        reader.onerror = () => {
+          reject(new Error('Failed to read image file'));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
   }, []);
 
   const parsedContent = useMemo(() => {

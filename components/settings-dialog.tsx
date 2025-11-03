@@ -27,6 +27,7 @@ export const SettingsDialog = ({
   const [storageSize, setStorageSize] = useState<string>('0 KB');
   const [characterCount, setCharacterCount] = useState(0);
   const [blockCount, setBlockCount] = useState(0);
+  const [imageCount, setImageCount] = useState(0);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -46,6 +47,7 @@ export const SettingsDialog = ({
         let totalSize = 0;
         let totalCharacters = 0;
         let totalBlocks = 0;
+        let totalImages = 0;
 
         if (documentsList) {
           const docs = JSON.parse(documentsList);
@@ -59,7 +61,13 @@ export const SettingsDialog = ({
               if (content) {
                 try {
                   const parsed = JSON.parse(content);
-                  if (Array.isArray(parsed)) {
+                  // Vérifier si c'est un canvas (objet avec nodes/edges)
+                  if (typeof parsed === 'object' && parsed !== null && parsed.nodes && parsed.edges) {
+                    // Compter les nodes de type imageInput
+                    const imageNodes = parsed.nodes.filter((node: any) => node.type === 'imageInput');
+                    totalImages += imageNodes.length;
+                  } else if (Array.isArray(parsed)) {
+                    // Format BlockNote (tableau de blocks)
                     totalBlocks += parsed.length;
                   }
                 } catch {
@@ -78,7 +86,12 @@ export const SettingsDialog = ({
           totalCharacters += oldContent.length;
           try {
             const parsed = JSON.parse(oldContent);
-            if (Array.isArray(parsed)) {
+            if (typeof parsed === 'object' && parsed !== null && parsed.nodes && parsed.edges) {
+              // Canvas format
+              const imageNodes = parsed.nodes.filter((node: any) => node.type === 'imageInput');
+              totalImages += imageNodes.length;
+            } else if (Array.isArray(parsed)) {
+              // BlockNote format
               totalBlocks += parsed.length;
             }
           } catch {
@@ -90,10 +103,12 @@ export const SettingsDialog = ({
         setStorageSize(sizeInKB + ' KB');
         setCharacterCount(totalCharacters);
         setBlockCount(totalBlocks);
+        setImageCount(totalImages);
       } catch (error) {
         setStorageSize('0 KB');
         setCharacterCount(0);
         setBlockCount(0);
+        setImageCount(0);
       }
     };
     calculateStorage();
@@ -184,15 +199,15 @@ export const SettingsDialog = ({
         >
           <div className="relative w-full max-w-lg max-h-[85vh] border bg-background dark:bg-[#1a1a1c] shadow-lg rounded-lg flex flex-col">
             <div className="p-6 flex flex-col flex-1 min-h-0">
-              <Dialog.Title className="text-base font-semibold">Settings</Dialog.Title>
-              <Dialog.Description className="text-sm text-muted-foreground">
+              <Dialog.Title className="text-base font-semibold mb-1">Settings</Dialog.Title>
+              <Dialog.Description className="text-sm text-muted-foreground mb-4">
                 Configure your editor according to your preferences
               </Dialog.Description>
 
               <div className="space-y-6 overflow-y-auto flex-1 pr-2 -mr-2">
                 {/* Appearance */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Appearance</h3>
+                  <h3 className="text-sm font-medium underline">Appearance</h3>
                   
                   {/* Editor width */}
                   <div className="space-y-2">
@@ -217,7 +232,7 @@ export const SettingsDialog = ({
 
                 {/* Behavior */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Behavior</h3>
+                  <h3 className="text-sm font-medium underline">Behavior</h3>
                   
                   {/* Auto-save */}
                   <div className="flex items-center justify-between">
@@ -278,7 +293,7 @@ export const SettingsDialog = ({
 
                 {/* Import */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Import</h3>
+                  <h3 className="text-sm font-medium underline">Import</h3>
                   <div className="grid grid-cols-4 gap-2">
                     <button
                       onClick={() => handleFileImport('json')}
@@ -313,7 +328,7 @@ export const SettingsDialog = ({
 
                 {/* Export */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Export</h3>
+                  <h3 className="text-sm font-medium underline">Export</h3>
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={() => onExport?.('json')}
@@ -341,7 +356,7 @@ export const SettingsDialog = ({
 
                 {/* Information */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Information</h3>
+                  <h3 className="text-sm font-medium underline">Information</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Storage used</span>
@@ -356,6 +371,10 @@ export const SettingsDialog = ({
                       <span className="font-medium">{blockCount}</span>
                     </div>
                     <div className="flex justify-between">
+                      <span className="text-muted-foreground">Images</span>
+                      <span className="font-medium">{imageCount}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-muted-foreground">Version</span>
                       <span className="font-medium">1.2.0</span>
                     </div>
@@ -364,7 +383,7 @@ export const SettingsDialog = ({
 
                 {/* Advanced */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Advanced</h3>
+                  <h3 className="text-sm font-medium underline">Advanced</h3>
                   <AlertDialog.Root>
                     <AlertDialog.Trigger asChild>
                       <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-destructive/50 dark:border-red-500/60 text-destructive dark:text-red-400 hover:bg-destructive/10 dark:hover:bg-red-500/10 transition-colors text-sm">

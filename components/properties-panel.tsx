@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { Node } from "@xyflow/react";
 import { Play, MoreVertical, Trash2, X } from "lucide-react";
+import { compressImage } from "../utils/image-compression";
 
 interface PropertiesPanelProps {
   selectedNode: Node | null;
@@ -37,28 +38,42 @@ const ImageInputProperties = ({
       }
 
       setIsLoadingImage(true);
-      const reader = new FileReader();
 
-      reader.onload = (e) => {
-        const result = e.target?.result;
-        if (typeof result === "string" && onNodeChange) {
-          onNodeChange(selectedNode.id, { ...nodeData, imageUrl: result });
-        }
-        setIsLoadingImage(false);
-        if (imageFileInputRef.current) {
-          imageFileInputRef.current.value = "";
-        }
-      };
-
-      reader.onerror = () => {
-        console.error("Erreur lors de la lecture du fichier");
-        setIsLoadingImage(false);
-        if (imageFileInputRef.current) {
-          imageFileInputRef.current.value = "";
-        }
-      };
-
-      reader.readAsDataURL(file);
+      // Compresser l'image avant de la sauvegarder (compression agressive)
+      compressImage(file, {
+        maxWidth: 600,
+        maxHeight: 600,
+        quality: 0.65,
+        maxSizeKB: 120,
+      })
+        .then((compressedDataUrl) => {
+          if (onNodeChange) {
+            onNodeChange(selectedNode.id, { ...nodeData, imageUrl: compressedDataUrl });
+          }
+          setIsLoadingImage(false);
+          if (imageFileInputRef.current) {
+            imageFileInputRef.current.value = "";
+          }
+        })
+        .catch((error) => {
+          console.error("Erreur lors de la compression du fichier:", error);
+          setIsLoadingImage(false);
+          if (imageFileInputRef.current) {
+            imageFileInputRef.current.value = "";
+          }
+          // Fallback: utiliser l'image originale si la compression échoue
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const result = e.target?.result;
+            if (typeof result === "string" && onNodeChange) {
+              onNodeChange(selectedNode.id, { ...nodeData, imageUrl: result });
+            }
+          };
+          reader.onerror = () => {
+            console.error("Erreur lors de la lecture du fichier");
+          };
+          reader.readAsDataURL(file);
+        });
     },
     [selectedNode.id, nodeData, onNodeChange]
   );

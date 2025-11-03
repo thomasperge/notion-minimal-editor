@@ -29,6 +29,7 @@ import { BlockSearchMenu } from "./block-search-menu";
 import { useAlignmentGuides } from "./alignment-guides";
 import { EdgeStyleControls } from "./edge-style-controls";
 import { PanelRightClose, PanelRight } from "lucide-react";
+import { compressImage } from "../utils/image-compression";
 
 interface CanvasEditorProps {
   onChange?: (nodesJson: string) => void;
@@ -338,15 +339,30 @@ const CanvasEditor = ({
           const file = items[i].getAsFile();
           if (!file) continue;
 
-          // Convert file to data URL
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const imageUrl = event.target?.result as string;
+          // Compresser l'image avant de la sauvegarder (même compression que pour les uploads)
+          try {
+            const compressedImageUrl = await compressImage(file, {
+              maxWidth: 600,
+              maxHeight: 600,
+              quality: 0.65,
+              maxSizeKB: 120,
+            });
+            
             if (handlePasteImageRef.current) {
-              handlePasteImageRef.current(imageUrl);
+              handlePasteImageRef.current(compressedImageUrl);
             }
-          };
-          reader.readAsDataURL(file);
+          } catch (error) {
+            console.error("Erreur lors de la compression de l'image collée:", error);
+            // Fallback: utiliser l'image originale si la compression échoue
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const imageUrl = event.target?.result as string;
+              if (handlePasteImageRef.current) {
+                handlePasteImageRef.current(imageUrl);
+              }
+            };
+            reader.readAsDataURL(file);
+          }
           break;
         }
       }

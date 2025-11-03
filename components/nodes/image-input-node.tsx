@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { compressImage } from "../../utils/image-compression";
 
 interface ImageInputNodeData {
   imageUrl?: string;
@@ -96,36 +97,49 @@ export const ImageInputNode = ({ id, data, selected }: any) => {
       // Marquer qu'on est en train de charger
       isLoadingFileRef.current = true;
 
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        const result = e.target?.result;
-        if (typeof result === "string") {
+      // Compresser l'image avant de la sauvegarder (compression agressive)
+      compressImage(file, {
+        maxWidth: 600,
+        maxHeight: 600,
+        quality: 0.65,
+        maxSizeKB: 120,
+      })
+        .then((compressedDataUrl) => {
           // Mettre à jour immédiatement l'affichage
-          persistentUrlRef.current = result;
-          setLocalImageUrl(result);
+          persistentUrlRef.current = compressedDataUrl;
+          setLocalImageUrl(compressedDataUrl);
           
           // Mettre à jour React Flow
-          updateNodeDataInFlow(result);
+          updateNodeDataInFlow(compressedDataUrl);
           
           // Réinitialiser l'input après la mise à jour
           if (fileInputRef.current) {
             fileInputRef.current.value = "";
           }
-        } else {
+          
           isLoadingFileRef.current = false;
-        }
-      };
-
-      reader.onerror = () => {
-        console.error(`Erreur lors de la lecture du fichier`);
-        isLoadingFileRef.current = false;
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-      };
-
-      reader.readAsDataURL(file);
+        })
+        .catch((error) => {
+          console.error(`Erreur lors de la compression du fichier:`, error);
+          isLoadingFileRef.current = false;
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+          // Fallback: utiliser l'image originale si la compression échoue
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const result = e.target?.result;
+            if (typeof result === "string") {
+              persistentUrlRef.current = result;
+              setLocalImageUrl(result);
+              updateNodeDataInFlow(result);
+              if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+              }
+            }
+          };
+          reader.readAsDataURL(file);
+        });
     },
     [updateNodeDataInFlow]
   );
