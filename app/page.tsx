@@ -40,6 +40,7 @@ const HomePage = () => {
     getDocumentContent,
     saveDocumentContent,
     documents,
+    createDocument,
   } = useDocumentsContext();
 
   // Migrate old data to new system (one-time migration)
@@ -107,20 +108,40 @@ const HomePage = () => {
   useEffect(() => {
     if (!documentsLoaded) return;
 
+    // Vérifier que le document actuel existe toujours dans la liste
+    if (currentDocumentId) {
+      const documentExists = documents.some(doc => doc.id === currentDocumentId);
+      if (!documentExists) {
+        console.log(`⚠️ Document ${currentDocumentId} no longer exists, clearing content`);
+        // Le document a été supprimé, nettoyer l'affichage
+        setIsContentLoaded(false);
+        editorRef.current = null;
+        pendingSaveRef.current = null;
+        setInitialContent(undefined);
+        setEditorKey("");
+        previousDocumentIdRef.current = null;
+        return;
+      }
+    }
+
     // Save previous document content BEFORE switching
     if (previousDocumentIdRef.current && previousDocumentIdRef.current !== currentDocumentId) {
-      if (editorRef.current && pendingSaveRef.current) {
-        console.log(`💾 Saving previous document ${previousDocumentIdRef.current} before switch`);
-        saveCurrentDocumentContent(previousDocumentIdRef.current, pendingSaveRef.current);
-        pendingSaveRef.current = null;
-      } else if (editorRef.current) {
-        // Try to get current content from editor
-        try {
-          const currentContent = JSON.stringify(editorRef.current.topLevelBlocks, null, 2);
-          console.log(`💾 Saving previous document ${previousDocumentIdRef.current} (from editor)`);
-          saveCurrentDocumentContent(previousDocumentIdRef.current, currentContent);
-        } catch (error) {
-          console.error("Failed to get content from editor:", error);
+      // Vérifier que le document précédent existe toujours avant de sauvegarder
+      const previousDocExists = documents.some(doc => doc.id === previousDocumentIdRef.current);
+      if (previousDocExists) {
+        if (editorRef.current && pendingSaveRef.current) {
+          console.log(`💾 Saving previous document ${previousDocumentIdRef.current} before switch`);
+          saveCurrentDocumentContent(previousDocumentIdRef.current, pendingSaveRef.current);
+          pendingSaveRef.current = null;
+        } else if (editorRef.current) {
+          // Try to get current content from editor
+          try {
+            const currentContent = JSON.stringify(editorRef.current.topLevelBlocks, null, 2);
+            console.log(`💾 Saving previous document ${previousDocumentIdRef.current} (from editor)`);
+            saveCurrentDocumentContent(previousDocumentIdRef.current, currentContent);
+          } catch (error) {
+            console.error("Failed to get content from editor:", error);
+          }
         }
       }
     }
@@ -132,6 +153,17 @@ const HomePage = () => {
 
     // Load new document content
     if (currentDocumentId) {
+      // Double vérification : s'assurer que le document existe toujours
+      const documentExists = documents.some(doc => doc.id === currentDocumentId);
+      if (!documentExists) {
+        console.log(`⚠️ Document ${currentDocumentId} does not exist, skipping load`);
+        setInitialContent(undefined);
+        setIsContentLoaded(true);
+        setEditorKey("");
+        previousDocumentIdRef.current = currentDocumentId;
+        return;
+      }
+
       const content = getDocumentContent(currentDocumentId);
       
       if (content) {
@@ -183,7 +215,7 @@ const HomePage = () => {
 
     // Update previous document reference
     previousDocumentIdRef.current = currentDocumentId;
-  }, [currentDocumentId, documentsLoaded, getDocumentContent, saveCurrentDocumentContent]);
+  }, [currentDocumentId, documentsLoaded, documents, getDocumentContent, saveCurrentDocumentContent]);
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -1045,10 +1077,107 @@ const HomePage = () => {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
         />
-        {isLoaded && isContentLoaded && documentsLoaded && (() => {
+        
+        {isLoaded && documentsLoaded && (() => {
+          // Vue par défaut quand il n'y a aucun document
+          if (documents.length === 0) {
+            return (
+              <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+                <div className="text-center max-w-md px-4">
+                  <div className="mb-4 flex justify-center items-center opacity-40">
+                    <Image src="/folder.png" alt="Logo" width={60} height={60} />
+                  </div>
+                  <h2 className="text-xl font-semibold mb-2 text-foreground">
+                    Aucun document
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Vous n'avez pas encore de documents. Créez votre premier document ou canvas pour commencer.
+                  </p>
+                  <div className="flex gap-2 justify-center mt-4">
+                    <button
+                      onClick={() => createDocument('document')}
+                      className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium"
+                    >
+                      Créer un document
+                    </button>
+                    <button
+                      onClick={() => createDocument('canvas')}
+                      className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-muted transition-colors font-medium"
+                    >
+                      Créer un canvas
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Vue par défaut si aucun document n'est sélectionné
+          if (!currentDocumentId) {
+            return (
+              <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+                <div className="text-center max-w-md px-4">
+                  <div className="text-3xl mb-4">📄</div>
+                  <h2 className="text-lg font-semibold mb-2 text-foreground">
+                    Aucun document sélectionné
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Sélectionnez un document dans la barre latérale ou créez-en un nouveau pour commencer.
+                  </p>
+                  <div className="flex gap-2 justify-center mt-4">
+                    <button
+                      onClick={() => createDocument('document')}
+                      className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium"
+                    >
+                      Créer un document
+                    </button>
+                    <button
+                      onClick={() => createDocument('canvas')}
+                      className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-muted transition-colors font-medium"
+                    >
+                      Créer un canvas
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Vérifier que le document sélectionné existe toujours dans la liste
           const currentDoc = documents.find(doc => doc.id === currentDocumentId);
-          const isCanvas = currentDoc?.type === 'canvas';
+          if (!currentDoc) {
+            return (
+              <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+                <div className="text-center max-w-md px-4">
+                  <div className="text-3xl mb-4">📄</div>
+                  <h2 className="text-lg font-semibold mb-2 text-foreground">
+                    Document introuvable
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Le document sélectionné n'existe plus. Sélectionnez un autre document ou créez-en un nouveau.
+                  </p>
+                  <div className="flex gap-2 justify-center mt-4">
+                    <button
+                      onClick={() => createDocument('document')}
+                      className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium"
+                    >
+                      Créer un document
+                    </button>
+                    <button
+                      onClick={() => createDocument('canvas')}
+                      className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-muted transition-colors font-medium"
+                    >
+                      Créer un canvas
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          const isCanvas = currentDoc.type === 'canvas';
           
+          // Pour les canvas, on affiche directement sans attendre isContentLoaded
           if (isCanvas) {
             return (
               <CanvasEditor
@@ -1058,7 +1187,19 @@ const HomePage = () => {
               />
             );
           }
+
+          // Attendre que le contenu soit chargé avant d'afficher l'éditeur texte
+          if (!isContentLoaded) {
+            return (
+              <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+                <div className="text-center">
+                  <div className="text-muted-foreground">Chargement...</div>
+                </div>
+              </div>
+            );
+          }
           
+          // Afficher l'éditeur texte seulement si un document valide est sélectionné
           return (
             <div className={`mx-auto pt-10 pb-24 px-4 min-h-[calc(100vh-3.5rem)] w-full ${
               editorWidth === 'narrow' ? 'max-w-2xl' :
@@ -1066,21 +1207,12 @@ const HomePage = () => {
               editorWidth === 'wide' ? 'max-w-6xl' :
               'max-w-full'
             }`}>
-              {currentDocumentId ? (
-                <Editor 
-                  key={editorKey || currentDocumentId}
-                  onEditorReady={handleEditorReady}
-                  initialContent={initialContent}
-                  onChange={handleContentChange}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <p className="text-muted-foreground mb-4">No document selected</p>
-                    <p className="text-sm text-muted-foreground">Create a new page from the sidebar</p>
-                  </div>
-                </div>
-              )}
+              <Editor 
+                key={editorKey || currentDocumentId}
+                onEditorReady={handleEditorReady}
+                initialContent={initialContent}
+                onChange={handleContentChange}
+              />
             </div>
           );
         })()}
