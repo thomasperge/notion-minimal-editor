@@ -17,6 +17,7 @@ const DOCUMENT_PREFIX = "document-";
 export const useDocuments = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(null);
+  const [secondaryDocumentId, setSecondaryDocumentId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Function to load documents from localStorage
@@ -37,7 +38,17 @@ export const useDocuments = () => {
 
         if (currentId) {
           setCurrentDocumentId(currentId);
+        }
+        
+        // Load secondary document ID from localStorage
+        const secondaryId = localStorage.getItem("secondary-document-id");
+        if (secondaryId) {
+          setSecondaryDocumentId(secondaryId);
         } else {
+          setSecondaryDocumentId(null);
+        }
+        
+        if (!currentId) {
           // If no current document, check if there are any documents
           if (Array.isArray(docs) && docs.length > 0) {
             setCurrentDocumentId(docs[0].id);
@@ -111,6 +122,10 @@ export const useDocuments = () => {
                   { type: "text" as const, text: "📱 QR code sharing for ", styles: {} },
                   { type: "text" as const, text: "iPhone", styles: { bold: true, textColor: "blue" } }
                 ]
+              },
+              {
+                type: "paragraph" as const,
+                content: ""
               },
               {
                 type: "heading" as const,
@@ -255,8 +270,15 @@ export const useDocuments = () => {
         localStorage.removeItem(CURRENT_DOCUMENT_KEY);
       }
     }
+
+    // If deleting secondary document, close split view
+    if (secondaryDocumentId === id) {
+      setSecondaryDocumentId(null);
+      localStorage.removeItem("secondary-document-id");
+    }
+    
     console.log('✅ Delete complete');
-  }, [documents, currentDocumentId, saveDocumentsList, setCurrentDocumentId]);
+  }, [documents, currentDocumentId, secondaryDocumentId, saveDocumentsList, setCurrentDocumentId]);
 
   // Duplicate a document
   const duplicateDocument = useCallback((id: string) => {
@@ -366,9 +388,26 @@ export const useDocuments = () => {
     localStorage.setItem(CURRENT_DOCUMENT_KEY, id);
   }, [setCurrentDocumentId]);
 
+  // Open a document in the split view (right panel)
+  const openInSplit = useCallback((id: string) => {
+    // Don't allow opening the same document in both panels
+    if (id === currentDocumentId) return;
+    
+    setSecondaryDocumentId(id);
+    localStorage.setItem("secondary-document-id", id);
+  }, [currentDocumentId]);
+
+  // Close the split view
+  const closeSplit = useCallback(() => {
+    setSecondaryDocumentId(null);
+    localStorage.removeItem("secondary-document-id");
+  }, []);
+
+
   return {
     documents,
     currentDocumentId,
+    secondaryDocumentId,
     isLoaded,
     createDocument,
     updateDocumentTitle,
@@ -377,6 +416,8 @@ export const useDocuments = () => {
     getDocumentContent,
     saveDocumentContent,
     switchToDocument,
+    openInSplit,
+    closeSplit,
   };
 };
 

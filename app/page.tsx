@@ -9,7 +9,7 @@ import { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { useDocumentsContext } from "@/components/providers/documents-provider";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { X } from "lucide-react";
+import { X, FileText, GitBranch, X as XIcon } from "lucide-react";
 import * as QRCode from "qrcode";
 
 const HomePage = () => {
@@ -28,6 +28,16 @@ const HomePage = () => {
   const autoSaveRef = useRef(true);
   const [isContentLoaded, setIsContentLoaded] = useState(false);
   const [editorKey, setEditorKey] = useState<string>("");
+  
+  // States for secondary document (split view)
+  const secondaryEditorRef = useRef<BlockNoteEditor | null>(null);
+  const previousSecondaryDocumentIdRef = useRef<string | null>(null);
+  const pendingSecondarySaveRef = useRef<string | null>(null);
+  const [secondaryInitialContent, setSecondaryInitialContent] = useState<string | undefined>(undefined);
+  const [secondaryIsContentLoaded, setSecondaryIsContentLoaded] = useState(false);
+  const [secondaryEditorKey, setSecondaryEditorKey] = useState<string>("");
+  const [secondaryCanUndo, setSecondaryCanUndo] = useState(false);
+  const [secondaryCanRedo, setSecondaryCanRedo] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<{ url: string; title: string; contentLength: number } | null>(null);
@@ -36,10 +46,13 @@ const HomePage = () => {
 
   const {
     currentDocumentId,
+    secondaryDocumentId,
     isLoaded: documentsLoaded,
     getDocumentContent,
     saveDocumentContent,
     documents,
+    createDocument,
+    closeSplit,
   } = useDocumentsContext();
 
   // Migrate old data to new system (one-time migration)
@@ -102,6 +115,33 @@ const HomePage = () => {
       saveCurrentDocumentContent(currentDocumentId, content);
     }
   }, [currentDocumentId, saveCurrentDocumentContent]);
+
+  // Save content for secondary document
+  const saveSecondaryDocumentContent = useCallback((documentId: string | null, content: string | null) => {
+    if (!documentId || !content || !autoSaveRef.current) return;
+    
+    try {
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) || (typeof parsed === 'object' && parsed.nodes && parsed.edges)) {
+        const storageKey = `document-${documentId}`;
+        localStorage.setItem(storageKey, content);
+        saveDocumentContent(documentId, content);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to save secondary document ${documentId}:`, error);
+    }
+  }, [saveDocumentContent]);
+
+  // Handle content change for secondary document
+  const handleSecondaryContentChange = useCallback((content: string) => {
+    if (!content || !secondaryDocumentId) return;
+    
+    pendingSecondarySaveRef.current = content;
+    
+    if (autoSaveRef.current && secondaryDocumentId) {
+      saveSecondaryDocumentContent(secondaryDocumentId, content);
+    }
+  }, [secondaryDocumentId, saveSecondaryDocumentContent]);
 
   // CRITICAL: Handle document switching - save old, load new
   useEffect(() => {
@@ -185,6 +225,73 @@ const HomePage = () => {
     previousDocumentIdRef.current = currentDocumentId;
   }, [currentDocumentId, documentsLoaded, getDocumentContent, saveCurrentDocumentContent]);
 
+  // Load secondary document content
+  useEffect(() => {
+    if (!documentsLoaded) return;
+
+    // Save previous secondary document content BEFORE switching
+    if (previousSecondaryDocumentIdRef.current && previousSecondaryDocumentIdRef.current !== secondaryDocumentId) {
+      if (secondaryEditorRef.current && pendingSecondarySaveRef.current) {
+        console.log(`💾 Saving previous secondary document ${previousSecondaryDocumentIdRef.current} before switch`);
+        saveSecondaryDocumentContent(previousSecondaryDocumentIdRef.current, pendingSecondarySaveRef.current);
+        pendingSecondarySaveRef.current = null;
+      } else if (secondaryEditorRef.current) {
+        try {
+          const currentContent = JSON.stringify(secondaryEditorRef.current.topLevelBlocks, null, 2);
+          console.log(`💾 Saving previous secondary document ${previousSecondaryDocumentIdRef.current} (from editor)`);
+          saveSecondaryDocumentContent(previousSecondaryDocumentIdRef.current, currentContent);
+        } catch (error) {
+          console.error("Failed to get content from secondary editor:", error);
+        }
+      }
+    }
+
+    // Reset secondary editor state
+    setSecondaryIsContentLoaded(false);
+    secondaryEditorRef.current = null;
+    pendingSecondarySaveRef.current = null;
+
+    // Load new secondary document content
+    if (secondaryDocumentId) {
+      const content = getDocumentContent(secondaryDocumentId);
+      
+      if (content) {
+        try {
+          let parsed = JSON.parse(content);
+          
+          if (Array.isArray(parsed) && parsed.length === 1 && typeof parsed[0] === 'object' && parsed[0].nodes && parsed[0].edges) {
+            parsed = parsed[0];
+            const correctContent = JSON.stringify(parsed);
+            localStorage.setItem(`document-${secondaryDocumentId}`, correctContent);
+            saveDocumentContent(secondaryDocumentId, correctContent);
+            setSecondaryInitialContent(correctContent);
+            return;
+          }
+          
+          if (Array.isArray(parsed) || (typeof parsed === 'object' && parsed.nodes && parsed.edges)) {
+            setSecondaryInitialContent(content);
+          } else {
+            setSecondaryInitialContent(undefined);
+          }
+        } catch (error) {
+          console.error(`❌ Failed to parse secondary document ${secondaryDocumentId}:`, error);
+          setSecondaryInitialContent(undefined);
+        }
+      } else {
+        setSecondaryInitialContent(undefined);
+      }
+      
+      setSecondaryEditorKey(`${secondaryDocumentId}-${Date.now()}`);
+      setSecondaryIsContentLoaded(true);
+    } else {
+      setSecondaryInitialContent(undefined);
+      setSecondaryIsContentLoaded(true);
+      setSecondaryEditorKey("");
+    }
+
+    previousSecondaryDocumentIdRef.current = secondaryDocumentId;
+  }, [secondaryDocumentId, documentsLoaded, getDocumentContent, saveDocumentContent, saveSecondaryDocumentContent]);
+
   // Load settings from localStorage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -245,6 +352,30 @@ const HomePage = () => {
     }
   };
 
+  const handleSecondaryEditorReady = (editor: BlockNoteEditor) => {
+    secondaryEditorRef.current = editor;
+    
+    // Access TipTap editor for undo/redo
+    const tiptapEditor = (editor as any)._tiptapEditor;
+    
+    if (tiptapEditor) {
+      setSecondaryCanUndo(tiptapEditor.can().undo());
+      setSecondaryCanRedo(tiptapEditor.can().redo());
+      
+      const updateState = () => {
+        if (tiptapEditor) {
+          setSecondaryCanUndo(tiptapEditor.can().undo());
+          setSecondaryCanRedo(tiptapEditor.can().redo());
+        }
+      };
+      
+      tiptapEditor.on('transaction', updateState);
+      tiptapEditor.on('update', updateState);
+      
+      (secondaryEditorRef.current as any).__updateState = updateState;
+    }
+  };
+
   const handleUndo = () => {
     if (editorRef.current) {
       const tiptapEditor = (editorRef.current as any)._tiptapEditor;
@@ -263,6 +394,28 @@ const HomePage = () => {
         tiptapEditor.chain().focus().redo().run();
         setCanUndo(tiptapEditor.can().undo());
         setCanRedo(tiptapEditor.can().redo());
+      }
+    }
+  };
+
+  const handleSecondaryUndo = () => {
+    if (secondaryEditorRef.current) {
+      const tiptapEditor = (secondaryEditorRef.current as any)._tiptapEditor;
+      if (tiptapEditor) {
+        tiptapEditor.chain().focus().undo().run();
+        setSecondaryCanUndo(tiptapEditor.can().undo());
+        setSecondaryCanRedo(tiptapEditor.can().redo());
+      }
+    }
+  };
+
+  const handleSecondaryRedo = () => {
+    if (secondaryEditorRef.current) {
+      const tiptapEditor = (secondaryEditorRef.current as any)._tiptapEditor;
+      if (tiptapEditor) {
+        tiptapEditor.chain().focus().redo().run();
+        setSecondaryCanUndo(tiptapEditor.can().undo());
+        setSecondaryCanRedo(tiptapEditor.can().redo());
       }
     }
   };
@@ -1045,10 +1198,186 @@ const HomePage = () => {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
         />
-        {isLoaded && isContentLoaded && documentsLoaded && (() => {
+        {isLoaded && documentsLoaded && (() => {
+          // Display default view if no documents or no document selected
+          if (documents.length === 0 || !currentDocumentId) {
+            return (
+              <div className="flex items-center justify-center min-h-[calc(100vh-3.5rem)] w-full">
+                <div className="text-center px-4">
+                  <div className="flex justify-center mb-4">
+                    <Image 
+                      src="/folder-empty.png" 
+                      alt="Empty folder" 
+                      width={64} 
+                      height={64}
+                      className="opacity-50"
+                    />
+                  </div>
+                  <h2 className="text-xl font-semibold text-foreground mb-2">
+                    {documents.length === 0 ? "No documents" : "No document selected"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {documents.length === 0 
+                      ? "You don't have any documents yet. Create your first document or canvas to get started."
+                      : "Select a document from the sidebar or create a new one."
+                    }
+                  </p>
+                  {documents.length === 0 && (
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <button
+                        onClick={() => createDocument('document')}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Create a document
+                      </button>
+                      <button
+                        onClick={() => createDocument('canvas')}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-muted text-foreground rounded-md hover:bg-muted/80 transition-colors"
+                      >
+                        <GitBranch className="w-4 h-4" />
+                        Create a canvas
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          // Check if the selected document exists
           const currentDoc = documents.find(doc => doc.id === currentDocumentId);
-          const isCanvas = currentDoc?.type === 'canvas';
+          if (!currentDoc) {
+            return (
+              <div className="flex items-center justify-center min-h-[calc(100vh-3.5rem)] w-full">
+                <div className="text-center px-4">
+                  <div className="flex justify-center mb-4">
+                    <Image 
+                      src="/folder-empty.png" 
+                      alt="Empty folder" 
+                      width={64} 
+                      height={64}
+                      className="opacity-50"
+                    />
+                  </div>
+                  <h2 className="text-xl font-semibold text-foreground mb-2">
+                    Document not found
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    The selected document no longer exists. Select another document or create a new one.
+                  </p>
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    <button
+                      onClick={() => createDocument('document')}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Create a document
+                    </button>
+                    <button
+                      onClick={() => createDocument('canvas')}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm bg-muted text-foreground rounded-md hover:bg-muted/80 transition-colors"
+                    >
+                      <GitBranch className="w-4 h-4" />
+                      Create a canvas
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Wait for content to load before displaying the editor
+          if (!isContentLoaded) {
+            return (
+              <div className="flex items-center justify-center min-h-[calc(100vh-3.5rem)] w-full">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                </div>
+              </div>
+            );
+          }
+
+          const isCanvas = currentDoc.type === 'canvas';
           
+          // Check if we have a secondary document for split view
+          const hasSecondary = secondaryDocumentId !== null;
+          const secondaryDoc = hasSecondary ? documents.find(doc => doc.id === secondaryDocumentId) : null;
+          const isSecondaryCanvas = secondaryDoc?.type === 'canvas';
+
+          // Render split view if secondary document exists
+          if (hasSecondary && secondaryDoc) {
+            return (
+              <div className="flex h-[calc(100vh-3.5rem)] w-full">
+                {/* Left Panel - Primary Document */}
+                <div className={`flex-1 flex flex-col border-r ${hasSecondary ? 'w-1/2' : 'w-full'}`}>
+                  {isCanvas ? (
+                    <CanvasEditor
+                      key={editorKey || currentDocumentId}
+                      initialContent={initialContent}
+                      onChange={handleContentChange}
+                    />
+                  ) : (
+                    <div className={`mx-auto pt-10 pb-24 px-4 min-h-full w-full overflow-y-auto ${
+                      editorWidth === 'narrow' ? 'max-w-2xl' :
+                      editorWidth === 'medium' ? 'max-w-4xl' :
+                      editorWidth === 'wide' ? 'max-w-6xl' :
+                      'max-w-full'
+                    }`}>
+                      <Editor 
+                        key={editorKey || currentDocumentId}
+                        onEditorReady={handleEditorReady}
+                        initialContent={initialContent}
+                        onChange={handleContentChange}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Panel - Secondary Document */}
+                <div className="flex-1 flex flex-col relative w-1/2">
+                  {/* Close button for secondary panel - top left to avoid any overlap */}
+                  <button
+                    onClick={closeSplit}
+                    className="absolute top-2 left-2 z-[110] p-1.5 rounded-md hover:bg-muted transition-colors bg-background/80 backdrop-blur-sm border border-border"
+                    title="Close split view"
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
+
+                  {!secondaryIsContentLoaded ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <p className="text-sm text-muted-foreground">Loading...</p>
+                      </div>
+                    </div>
+                  ) : isSecondaryCanvas ? (
+                    <CanvasEditor
+                      key={secondaryEditorKey || secondaryDocumentId}
+                      initialContent={secondaryInitialContent}
+                      onChange={handleSecondaryContentChange}
+                    />
+                  ) : (
+                    <div className={`mx-auto pt-10 pb-24 px-4 min-h-full w-full overflow-y-auto ${
+                      editorWidth === 'narrow' ? 'max-w-2xl' :
+                      editorWidth === 'medium' ? 'max-w-4xl' :
+                      editorWidth === 'wide' ? 'max-w-6xl' :
+                      'max-w-full'
+                    }`}>
+                      <Editor 
+                        key={secondaryEditorKey || secondaryDocumentId}
+                        onEditorReady={handleSecondaryEditorReady}
+                        initialContent={secondaryInitialContent}
+                        onChange={handleSecondaryContentChange}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          // Single panel view (no split)
           if (isCanvas) {
             return (
               <CanvasEditor
@@ -1066,21 +1395,12 @@ const HomePage = () => {
               editorWidth === 'wide' ? 'max-w-6xl' :
               'max-w-full'
             }`}>
-              {currentDocumentId ? (
-                <Editor 
-                  key={editorKey || currentDocumentId}
-                  onEditorReady={handleEditorReady}
-                  initialContent={initialContent}
-                  onChange={handleContentChange}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <p className="text-muted-foreground mb-4">No document selected</p>
-                    <p className="text-sm text-muted-foreground">Create a new page from the sidebar</p>
-                  </div>
-                </div>
-              )}
+              <Editor 
+                key={editorKey || currentDocumentId}
+                onEditorReady={handleEditorReady}
+                initialContent={initialContent}
+                onChange={handleContentChange}
+              />
             </div>
           );
         })()}

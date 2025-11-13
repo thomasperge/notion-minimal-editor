@@ -13,12 +13,14 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
   const {
     documents,
     currentDocumentId,
+    secondaryDocumentId,
     isLoaded,
     createDocument,
     updateDocumentTitle,
     deleteDocument,
     duplicateDocument,
     switchToDocument,
+    openInSplit,
   } = useDocumentsContext();
 
   const [showHelpTooltip, setShowHelpTooltip] = useState(false);
@@ -140,10 +142,13 @@ export const Sidebar = ({ onToggle }: SidebarProps) => {
                 key={document.id}
                 document={document}
                 isActive={document.id === currentDocumentId}
+                isSecondary={document.id === secondaryDocumentId}
+                currentDocumentId={currentDocumentId}
                 onSelect={switchToDocument}
                 onRename={updateDocumentTitle}
                 onDelete={deleteDocument}
                 onDuplicate={duplicateDocument}
+                onOpenInSplit={openInSplit}
               />
             ))
           )}

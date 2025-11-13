@@ -6,6 +6,7 @@ import { Document, useDocuments } from "@/hooks/use-documents";
 interface DocumentsContextType {
   documents: Document[];
   currentDocumentId: string | null;
+  secondaryDocumentId: string | null;
   isLoaded: boolean;
   createDocument: (type?: 'document' | 'canvas') => Document;
   updateDocumentTitle: (id: string, newTitle: string) => void;
@@ -14,6 +15,8 @@ interface DocumentsContextType {
   getDocumentContent: (id: string) => string | null;
   saveDocumentContent: (id: string, content: string) => void;
   switchToDocument: (id: string) => void;
+  openInSplit: (id: string) => void;
+  closeSplit: () => void;
 }
 
 const DocumentsContext = createContext<DocumentsContextType | undefined>(undefined);

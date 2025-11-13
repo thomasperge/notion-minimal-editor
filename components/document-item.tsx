@@ -1,26 +1,32 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { FileText, MoreVertical, Trash2, Copy, Edit2, GitBranch } from "lucide-react";
+import { FileText, MoreVertical, Trash2, Copy, Edit2, GitBranch, Split } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Document } from "@/hooks/use-documents";
 
 interface DocumentItemProps {
   document: Document;
   isActive: boolean;
+  isSecondary?: boolean;
+  currentDocumentId: string | null;
   onSelect: (id: string) => void;
   onRename: (id: string, newTitle: string) => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
+  onOpenInSplit?: (id: string) => void;
 }
 
 export const DocumentItem = ({
   document,
   isActive,
+  isSecondary = false,
+  currentDocumentId,
   onSelect,
   onRename,
   onDelete,
   onDuplicate,
+  onOpenInSplit,
 }: DocumentItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(document.title);
@@ -119,15 +125,30 @@ export const DocumentItem = ({
       )}
 
       {!isEditing && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
-          }}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity"
-        >
-          <MoreVertical className="h-4 w-4 text-muted-foreground" />
-        </button>
+        <>
+          {/* Split button - only show if there's a current document and this is not it */}
+          {currentDocumentId && currentDocumentId !== document.id && onOpenInSplit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenInSplit(document.id);
+              }}
+              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity"
+              title="Open in split view"
+            >
+              <Split className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(!showMenu);
+            }}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted transition-opacity"
+          >
+            <MoreVertical className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </>
       )}
 
       {showMenu && (

@@ -30,6 +30,8 @@ import { useAlignmentGuides } from "./alignment-guides";
 import { EdgeStyleControls } from "./edge-style-controls";
 import { PanelRightClose, PanelRight } from "lucide-react";
 import { compressImage } from "../utils/image-compression";
+import { DrawingLayer } from "./drawing-layer";
+import { Pencil } from "lucide-react";
 
 interface CanvasEditorProps {
   onChange?: (nodesJson: string) => void;
@@ -79,6 +81,145 @@ const CanvasEditor = ({
     };
   });
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  // Historique undo/redo pour les dessins
+  const drawingsHistoryRef = useRef<Array<{ points: { x: number; y: number }[]; color: string; strokeWidth: number }>[][]>([]);
+  const drawingsHistoryIndexRef = useRef(-1);
+  const isDrawingsUndoRedoRef = useRef(false);
+  const drawingsHistoryInitializedRef = useRef(false);
+  const [canUndoDrawing, setCanUndoDrawing] = useState(false);
+  const [canRedoDrawing, setCanRedoDrawing] = useState(false);
+
+  const [drawings, setDrawings] = useState<Array<{ points: { x: number; y: number }[]; color: string; strokeWidth: number }>>(() => {
+    if (initialContent && typeof window !== "undefined") {
+      try {
+        const parsed = JSON.parse(initialContent);
+        if (parsed.drawings && Array.isArray(parsed.drawings)) {
+          // Migration: convert old data URL format to new path format
+          if (parsed.drawings.length > 0 && typeof parsed.drawings[0] === 'string') {
+            // Old format - return empty array (can't convert images to paths)
+            return [];
+          }
+          return parsed.drawings;
+        }
+      } catch (error) {
+        console.error("Failed to parse drawings from initialContent:", error);
+      }
+    }
+    return [];
+  });
+  const [drawingColor, setDrawingColor] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("drawing-color");
+      return saved || "#000000";
+    }
+    return "#000000";
+  });
+  const [drawingStrokeWidth, setDrawingStrokeWidth] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("drawing-stroke-width");
+      return saved ? parseInt(saved) : 2;
+    }
+    return 2;
+  });
+
+  // Initialiser l'historique des dessins
+  useEffect(() => {
+    if (!drawingsHistoryInitializedRef.current) {
+      const initialDrawings = JSON.parse(JSON.stringify(drawings));
+      drawingsHistoryRef.current = [initialDrawings];
+      drawingsHistoryIndexRef.current = 0;
+      drawingsHistoryInitializedRef.current = true;
+      setCanUndoDrawing(false);
+      setCanRedoDrawing(false);
+      console.log('[UNDO/REDO PARENT] Initialisation:', {
+        drawingsLength: drawings.length,
+        historyLength: drawingsHistoryRef.current.length,
+        historyIndex: drawingsHistoryIndexRef.current
+      });
+    }
+  }, []);
+
+  // Fonction pour mettre à jour les dessins avec historique
+  const setDrawingsWithHistory = useCallback((newDrawings: Array<{ points: { x: number; y: number }[]; color: string; strokeWidth: number }>) => {
+    if (!drawingsHistoryInitializedRef.current) return;
+
+    // Ignorer si c'est un undo/redo
+    if (isDrawingsUndoRedoRef.current) {
+      isDrawingsUndoRedoRef.current = false;
+      setDrawings(newDrawings);
+      setCanUndoDrawing(drawingsHistoryIndexRef.current > 0);
+      setCanRedoDrawing(drawingsHistoryIndexRef.current < drawingsHistoryRef.current.length - 1);
+      return;
+    }
+
+    // Supprimer tout ce qui est après l'index actuel
+    if (drawingsHistoryIndexRef.current < drawingsHistoryRef.current.length - 1) {
+      drawingsHistoryRef.current = drawingsHistoryRef.current.slice(0, drawingsHistoryIndexRef.current + 1);
+    }
+
+    // Ajouter le nouvel état
+    const newState = JSON.parse(JSON.stringify(newDrawings));
+    drawingsHistoryRef.current.push(newState);
+    drawingsHistoryIndexRef.current = drawingsHistoryRef.current.length - 1;
+
+    // Limiter l'historique à 50 états
+    if (drawingsHistoryRef.current.length > 50) {
+      drawingsHistoryRef.current.shift();
+      drawingsHistoryIndexRef.current = drawingsHistoryRef.current.length - 1;
+    }
+
+    // Mettre à jour canUndo/canRedo
+    setCanUndoDrawing(drawingsHistoryIndexRef.current > 0);
+    setCanRedoDrawing(drawingsHistoryIndexRef.current < drawingsHistoryRef.current.length - 1);
+
+    console.log('[UNDO/REDO PARENT] Nouveau dessin ajouté:', {
+      newHistoryIndex: drawingsHistoryIndexRef.current,
+      newHistoryLength: drawingsHistoryRef.current.length,
+      canUndo: drawingsHistoryIndexRef.current > 0
+    });
+
+    setDrawings(newDrawings);
+  }, []);
+
+  // Fonctions undo/redo pour les dessins
+  const handleUndoDrawing = useCallback(() => {
+    if (drawingsHistoryIndexRef.current <= 0) return;
+    
+    isDrawingsUndoRedoRef.current = true;
+    drawingsHistoryIndexRef.current--;
+    
+    const previousState = drawingsHistoryRef.current[drawingsHistoryIndexRef.current];
+    if (previousState) {
+      const stateCopy = JSON.parse(JSON.stringify(previousState));
+      setDrawings(stateCopy);
+      setCanUndoDrawing(drawingsHistoryIndexRef.current > 0);
+      setCanRedoDrawing(drawingsHistoryIndexRef.current < drawingsHistoryRef.current.length - 1);
+      console.log('[UNDO/REDO PARENT] Undo:', {
+        newHistoryIndex: drawingsHistoryIndexRef.current,
+        canUndo: drawingsHistoryIndexRef.current > 0
+      });
+    }
+  }, []);
+
+  const handleRedoDrawing = useCallback(() => {
+    if (drawingsHistoryIndexRef.current >= drawingsHistoryRef.current.length - 1) return;
+    
+    isDrawingsUndoRedoRef.current = true;
+    drawingsHistoryIndexRef.current++;
+    
+    const nextState = drawingsHistoryRef.current[drawingsHistoryIndexRef.current];
+    if (nextState) {
+      const stateCopy = JSON.parse(JSON.stringify(nextState));
+      setDrawings(stateCopy);
+      setCanUndoDrawing(drawingsHistoryIndexRef.current > 0);
+      setCanRedoDrawing(drawingsHistoryIndexRef.current < drawingsHistoryRef.current.length - 1);
+      console.log('[UNDO/REDO PARENT] Redo:', {
+        newHistoryIndex: drawingsHistoryIndexRef.current,
+        canRedo: drawingsHistoryIndexRef.current < drawingsHistoryRef.current.length - 1
+      });
+    }
+  }, []);
 
   // Define node types
   const nodeTypes = useMemo<NodeTypes>(() => ({
@@ -163,12 +304,12 @@ const CanvasEditor = ({
   useEffect(() => {
     if (onChange) {
       const timer = setTimeout(() => {
-        const content = JSON.stringify({ nodes, edges }, null, 2);
+        const content = JSON.stringify({ nodes, edges, drawings }, null, 2);
         onChange(content);
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [nodes, edges, onChange]);
+  }, [nodes, edges, drawings, onChange]);
 
   // Notify parent when editor is ready
   useEffect(() => {
@@ -227,7 +368,7 @@ const CanvasEditor = ({
               currentMarkerType = "arrow";
             }
           }
-          
+
           const needsUpdate =
             currentType !== edgeStyle.type ||
             currentStyle.strokeWidth !== edgeStyle.strokeWidth ||
@@ -347,7 +488,7 @@ const CanvasEditor = ({
               quality: 0.65,
               maxSizeKB: 120,
             });
-            
+
             if (handlePasteImageRef.current) {
               handlePasteImageRef.current(compressedImageUrl);
             }
@@ -475,7 +616,18 @@ const CanvasEditor = ({
   const CanvasContent = ({ hasSelectedNode, propertiesPanelOpen, onTogglePropertiesPanel }: { hasSelectedNode: boolean; propertiesPanelOpen: boolean; onTogglePropertiesPanel: () => void }) => {
     const { screenToFlowPosition, getViewport, flowToScreenPosition } = useReactFlow();
     const { guides, snapPosition, handleNodeDrag, handleNodeDragStop } = useAlignmentGuides(nodes);
-    
+
+    // Pass drawing props to CanvasContent
+    const drawingProps = {
+      isDrawingMode,
+      drawings,
+      setDrawings,
+      drawingColor,
+      setDrawingColor,
+      drawingStrokeWidth,
+      setDrawingStrokeWidth,
+    };
+
     // Enhanced onNodesChange avec snap
     const onNodesChangeWithSnap = useCallback((changes: any) => {
       // Mettre à jour les nodes localement pour que snapPosition ait les dernières positions
@@ -486,7 +638,7 @@ const CanvasEditor = ({
         }
         return node;
       });
-      
+
       changes.forEach((change: any) => {
         if (change.type === "position" && change.position && change.dragging) {
           const node = updatedNodes.find((n) => n.id === change.id);
@@ -571,7 +723,7 @@ const CanvasEditor = ({
             <PanelRight className="h-4 w-4 text-gray-700 dark:text-gray-300" />
           )}
         </button>
-        
+
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -581,32 +733,36 @@ const CanvasEditor = ({
           onNodeDrag={handleNodeDrag}
           onNodeDragStop={handleNodeDragStop}
           nodeTypes={nodeTypes}
-          nodesDraggable={editable}
-          nodesConnectable={editable}
-          elementsSelectable={editable}
+          nodesDraggable={editable && !isDrawingMode}
+          nodesConnectable={editable && !isDrawingMode}
+          elementsSelectable={editable && !isDrawingMode}
           connectionMode={ConnectionMode.Loose}
           isValidConnection={isValidConnection}
           minZoom={0.1}
           maxZoom={2}
-          zoomOnScroll={true}
-          panOnDrag={true}
+          zoomOnScroll={!isDrawingMode}
+          panOnDrag={!isDrawingMode}
           autoPanOnNodeDrag={true}
           fitView={false}
           proOptions={{ hideAttribution: true }}
           defaultViewport={viewportRef.current}
           onMove={(event, newViewport) => {
             viewportRef.current = newViewport;
+            // Trigger redraw of drawings when viewport changes
+            if (typeof window !== 'undefined' && (window as any).__drawingLayerRedraw) {
+              (window as any).__drawingLayerRedraw();
+            }
           }}
         >
           <Background gap={12} color={isDark ? "#444" : "#d4d4d4"} size={1} />
-          
+
           {/* Alignment Guides */}
           <Panel position="top-left" className="pointer-events-none z-10">
             {guides.length > 0 && (
               <div className="absolute inset-0" style={{ width: '100vw', height: '100vh' }}>
                 {guides.map((guide) => {
                   const viewport = getViewport();
-                  
+
                   if (guide.orientation === "horizontal") {
                     const screenPos = flowToScreenPosition({ x: 0, y: guide.position });
                     return (
@@ -640,38 +796,83 @@ const CanvasEditor = ({
               </div>
             )}
           </Panel>
+
+          {/* Drawing Layer - Inside ReactFlow to access viewport - Always visible */}
+          <DrawingLayer
+            key="drawing-layer-stable"
+            isDrawing={isDrawingMode}
+            drawings={drawings}
+            onDrawingsChange={setDrawingsWithHistory}
+            width={typeof window !== "undefined" ? window.innerWidth : 1920}
+            height={typeof window !== "undefined" ? window.innerHeight - 56 : 1080}
+            color={drawingColor}
+            strokeWidth={drawingStrokeWidth}
+            onColorChange={(color) => {
+              setDrawingColor(color);
+              if (typeof window !== "undefined") {
+                localStorage.setItem("drawing-color", color);
+              }
+            }}
+            onStrokeWidthChange={(width) => {
+              setDrawingStrokeWidth(width);
+              if (typeof window !== "undefined") {
+                localStorage.setItem("drawing-stroke-width", width.toString());
+              }
+            }}
+            canUndo={canUndoDrawing}
+            canRedo={canRedoDrawing}
+            onUndo={handleUndoDrawing}
+            onRedo={handleRedoDrawing}
+          />
         </ReactFlow>
 
-        {/* Add Node Button - Bottom Center */}
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-[100] pointer-events-auto">
+
+        {/* Drawing and Add Node Buttons - Bottom Center */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-[100] pointer-events-auto flex items-center gap-2">
+          {/* Drawing Mode Toggle Button */}
           <button
-            onClick={() => {
-              setBlockMenuPosition({
-                x: window.innerWidth / 2 - 150,
-                y: window.innerHeight / 2 - 200,
-              });
-              setShowBlockMenu(true);
-            }}
-            className="flex items-center gap-2 bg-white/95 dark:bg-[#191919] dark:border-stone-700 backdrop-blur-sm border border-stone-300 rounded-xl px-4 py-2 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Add node"
+            onClick={() => setIsDrawingMode(!isDrawingMode)}
+            className={`flex items-center gap-2 bg-white/95 dark:bg-[#191919] dark:border-stone-700 backdrop-blur-sm border border-stone-300 rounded-xl px-4 py-2 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${isDrawingMode ? "bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700" : ""
+              }`}
+            aria-label={isDrawingMode ? "Désactiver le dessin" : "Activer le dessin"}
           >
-            <svg
-              className="w-4 h-4 text-gray-700 dark:text-gray-300"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span className="text-sm font-normal text-gray-900 dark:text-gray-100">
-              Add Node
+            <Pencil className={`w-4 h-4 ${isDrawingMode ? "text-blue-600 dark:text-blue-400" : "text-gray-700 dark:text-gray-300"}`} />
+            <span className={`text-sm font-normal ${isDrawingMode ? "text-blue-600 dark:text-blue-400" : "text-gray-900 dark:text-gray-100"}`}>
+              {isDrawingMode ? "Dessin actif" : "Dessiner"}
             </span>
           </button>
+
+          {/* Add Node Button */}
+          {!isDrawingMode && (
+            <button
+              onClick={() => {
+                setBlockMenuPosition({
+                  x: window.innerWidth / 2 - 150,
+                  y: window.innerHeight / 2 - 200,
+                });
+                setShowBlockMenu(true);
+              }}
+              className="flex items-center gap-2 bg-white/95 dark:bg-[#191919] dark:border-stone-700 backdrop-blur-sm border border-stone-300 rounded-xl px-4 py-2 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              aria-label="Add node"
+            >
+              <svg
+                className="w-4 h-4 text-gray-700 dark:text-gray-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span className="text-sm font-normal text-gray-900 dark:text-gray-100">
+                Add Node
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Block Search Menu */}
@@ -693,8 +894,8 @@ const CanvasEditor = ({
       data-testid="canvas-editor-container"
     >
       <ReactFlowProvider>
-        <CanvasContent 
-          hasSelectedNode={!!selectedNode} 
+        <CanvasContent
+          hasSelectedNode={!!selectedNode}
           propertiesPanelOpen={propertiesPanelOpen}
           onTogglePropertiesPanel={() => setPropertiesPanelOpen(!propertiesPanelOpen)}
         />
@@ -749,8 +950,8 @@ const CanvasEditor = ({
 
       {/* Properties Panel */}
       {propertiesPanelOpen && (
-        <PropertiesPanel 
-          selectedNode={selectedNode} 
+        <PropertiesPanel
+          selectedNode={selectedNode}
           onNodeChange={handleNodeChange}
           onNodeDelete={handleNodeDelete}
         />
